@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -76,9 +77,13 @@ fun FocusDashboardScreen(
     onNavigateToShields: () -> Unit = onNavigateToLocks,
     onNavigateToSync: () -> Unit = {},
     onNavigateToMusic: () -> Unit = {},
+    onActivateNuclearLock: (Int) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    var showNuclearDashboardDialog by remember { mutableStateOf(false) }
+    var nuclearMinutes by remember { mutableStateOf(30) }
+    var showNuclearWarningDialog by remember { mutableStateOf(false) }
 
     // Live phone study minutes: sum all saved sessions + currently active session elapsed time
     val activeElapsedMinutes = if (uiState.isStudyActive) {
@@ -165,6 +170,49 @@ fun FocusDashboardScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // Active Nuclear Total Lockout Alert Banner
+        if (uiState.isNuclearLockActive) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("dashboard_nuclear_active_banner"),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF7F1D1D)),
+                border = androidx.compose.foundation.BorderStroke(2.dp, Color(0xFFEF4444)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFFDC2626)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Filled.Lock, contentDescription = null, tint = Color.White, modifier = Modifier.size(24.dp))
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "☢️ NUCLEAR TOTAL LOCKOUT ACTIVE",
+                            fontWeight = FontWeight.Black,
+                            color = Color.White,
+                            fontSize = 14.sp
+                        )
+                        Text(
+                            text = "Phone completely locked • ${uiState.nuclearFormattedRemaining} remaining • Unbreakable",
+                            color = Color(0xFFFCA5A5),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            }
+        }
+
         // Hero Focus Mode Status Banner
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -581,7 +629,7 @@ fun FocusDashboardScreen(
             }
         }
 
-        // Quick Sprint Launchers
+        // Quick Focus Launchers
         Text(
             text = "QUICK FOCUS LAUNCHERS",
             fontSize = 12.sp,
@@ -610,6 +658,12 @@ fun FocusDashboardScreen(
                 onClick = { onStartSprint(50, "Deep Work Block") },
                 modifier = Modifier.weight(1f)
             )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
             QuickLaunchChip(
                 label = "4h Marathon",
                 sub = "45m/15m × 4",
@@ -625,6 +679,14 @@ fun FocusDashboardScreen(
                         )
                     )
                 },
+                modifier = Modifier.weight(1f)
+            )
+            QuickLaunchChip(
+                label = "Total Lockout ☢️",
+                sub = "Unbreakable",
+                icon = Icons.Filled.Lock,
+                color = Color(0xFFDC2626),
+                onClick = { showNuclearDashboardDialog = true },
                 modifier = Modifier.weight(1f)
             )
         }
@@ -730,6 +792,144 @@ fun FocusDashboardScreen(
                     )
                 }
             }
+        }
+
+        // Dialog: Nuclear Total Lockout Duration Selector
+        if (showNuclearDashboardDialog) {
+            val durations = listOf(15, 30, 45, 60, 90, 120)
+            AlertDialog(
+                onDismissRequest = { showNuclearDashboardDialog = false },
+                icon = {
+                    Icon(Icons.Filled.Lock, contentDescription = null, tint = Color(0xFFDC2626), modifier = Modifier.size(32.dp))
+                },
+                title = {
+                    Text("☢️ Nuclear Total Lockout", fontWeight = FontWeight.Black, fontSize = 18.sp, color = Color(0xFFDC2626))
+                },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(
+                            text = "Select lockout duration. All distracted apps will be sealed with NO early stop.",
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            durations.take(3).forEach { d ->
+                                FilterChip(
+                                    selected = nuclearMinutes == d,
+                                    onClick = { nuclearMinutes = d },
+                                    label = { Text("${d}m") },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            durations.drop(3).forEach { d ->
+                                FilterChip(
+                                    selected = nuclearMinutes == d,
+                                    onClick = { nuclearMinutes = d },
+                                    label = { Text("${d}m") },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            showNuclearDashboardDialog = false
+                            showNuclearWarningDialog = true
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Start Lockout ($nuclearMinutes min)", fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showNuclearDashboardDialog = false }) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
+
+        // Dialog: Warning Dialogue Box for Total Lockout
+        if (showNuclearWarningDialog) {
+            AlertDialog(
+                onDismissRequest = { showNuclearWarningDialog = false },
+                icon = {
+                    Icon(Icons.Filled.Warning, contentDescription = null, tint = Color(0xFFDC2626), modifier = Modifier.size(36.dp))
+                },
+                title = {
+                    Text(
+                        text = "TOTAL PHONE LOCKOUT WARNING",
+                        fontWeight = FontWeight.Black,
+                        fontSize = 17.sp,
+                        color = Color(0xFFDC2626),
+                        textAlign = TextAlign.Center
+                    )
+                },
+                text = {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "For the next $nuclearMinutes minutes, your phone is TOTALLY LOCKED to study mode.",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
+                        )
+                        Text(
+                            text = "• All distracted apps (YouTube Shorts, Social Media, Games) are 100% blocked.\n• System Settings & app uninstallation are locked.\n• You will NOT be able to close, cancel, or stop this session at all until the timer finishes!",
+                            fontSize = 13.sp,
+                            lineHeight = 18.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Surface(
+                            color = Color(0xFF450A0A),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = "⛔ Once you click Continue, there is NO WAY to stop it.",
+                                color = Color(0xFFFCA5A5),
+                                fontWeight = FontWeight.Black,
+                                fontSize = 12.sp,
+                                modifier = Modifier.padding(10.dp),
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            showNuclearWarningDialog = false
+                            onActivateNuclearLock(nuclearMinutes)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.testTag("confirm_nuclear_lock_button")
+                    ) {
+                        Text("Continue — Lock Me Out! ☢️", fontWeight = FontWeight.Black)
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = { showNuclearWarningDialog = false },
+                        modifier = Modifier.testTag("cancel_nuclear_lock_button")
+                    ) {
+                        Text("Cancel / Go Back", fontWeight = FontWeight.Bold)
+                    }
+                }
+            )
         }
 
         // Dialog: Focus Score Explanation

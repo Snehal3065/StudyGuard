@@ -26,7 +26,8 @@ data class AudioPlayerState(
     val isPlaying: Boolean = false,
     val progressMs: Long = 0L,
     val totalDurationMs: Long = 0L,
-    val isLooping: Boolean = true
+    val isLooping: Boolean = true,
+    val isShuffle: Boolean = false
 )
 
 object StudyAudioPlayer {
@@ -36,8 +37,46 @@ object StudyAudioPlayer {
     private var synthJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.Default)
 
+    private var currentPlaylistQueue: List<StudyMusicTrack> = emptyList()
+    private var currentQueueIndex: Int = 0
+
     private val _playerState = MutableStateFlow(AudioPlayerState())
     val playerState: StateFlow<AudioPlayerState> = _playerState.asStateFlow()
+
+    fun toggleShuffle() {
+        val newShuffle = !_playerState.value.isShuffle
+        _playerState.value = _playerState.value.copy(isShuffle = newShuffle)
+    }
+
+    fun playPlaylist(context: Context, tracks: List<StudyMusicTrack>, isShuffle: Boolean = false, startIndex: Int = 0) {
+        if (tracks.isEmpty()) return
+        currentPlaylistQueue = tracks
+        _playerState.value = _playerState.value.copy(isShuffle = isShuffle)
+        currentQueueIndex = startIndex.coerceIn(0, tracks.lastIndex)
+        val trackToPlay = if (isShuffle) {
+            tracks.random()
+        } else {
+            tracks[currentQueueIndex]
+        }
+        playTrack(context, trackToPlay)
+    }
+
+    fun playNext(context: Context) {
+        if (currentPlaylistQueue.isEmpty()) return
+        val nextTrack = if (_playerState.value.isShuffle) {
+            currentPlaylistQueue.random()
+        } else {
+            currentQueueIndex = (currentQueueIndex + 1) % currentPlaylistQueue.size
+            currentPlaylistQueue[currentQueueIndex]
+        }
+        playTrack(context, nextTrack)
+    }
+
+    fun playPrevious(context: Context) {
+        if (currentPlaylistQueue.isEmpty()) return
+        currentQueueIndex = if (currentQueueIndex - 1 < 0) currentPlaylistQueue.lastIndex else currentQueueIndex - 1
+        playTrack(context, currentPlaylistQueue[currentQueueIndex])
+    }
 
     fun playTrack(context: Context, track: StudyMusicTrack) {
         stop()
@@ -85,7 +124,11 @@ object StudyAudioPlayer {
 
             mp.setOnCompletionListener {
                 if (!it.isLooping) {
-                    _playerState.value = _playerState.value.copy(isPlaying = false, progressMs = 0L)
+                    if (currentPlaylistQueue.isNotEmpty()) {
+                        playNext(context)
+                    } else {
+                        _playerState.value = _playerState.value.copy(isPlaying = false, progressMs = 0L)
+                    }
                 }
             }
         } catch (e: Exception) {

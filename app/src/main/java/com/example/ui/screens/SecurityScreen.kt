@@ -39,9 +39,12 @@ fun SecurityScreen(
     uiState: StudyUiState,
     onToggleStrictLock: (Boolean) -> Unit,
     onRefreshPermissions: () -> Unit,
+    onActivateNuclearLock: (Int) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    var selectedNuclearMins by remember { mutableStateOf(30) }
+    var showNuclearConfirmDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier
@@ -194,6 +197,137 @@ fun SecurityScreen(
                     modifier = Modifier.testTag("strict_lock_switch")
                 )
             }
+        }
+
+        // Nuclear Strict Focus Lock Section
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = if (uiState.isNuclearLockActive) Color(0xFF7F1D1D) else MaterialTheme.colorScheme.surface
+            ),
+            border = if (uiState.isNuclearLockActive) androidx.compose.foundation.BorderStroke(2.dp, Color(0xFFEF4444)) else null
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "☢️ Nuclear Strict Focus Lock",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = if (uiState.isNuclearLockActive) Color.White else MaterialTheme.colorScheme.onSurface
+                    )
+                    if (uiState.isNuclearLockActive) {
+                        Surface(
+                            color = Color(0xFFDC2626),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text(
+                                text = "☢️ NUCLEAR",
+                                color = Color.White,
+                                fontWeight = FontWeight.Black,
+                                fontSize = 11.sp,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+                }
+
+                Text(
+                    text = if (uiState.isNuclearLockActive)
+                        "Nuclear Lock is ACTIVE (${uiState.nuclearFormattedRemaining} remaining). Distractions are completely sealed. StudyGuard cannot be stopped or uninstalled."
+                    else
+                        "Absolute focus enforcement. Once armed, uninstalls and distractions are completely locked until the countdown reaches 00:00.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (uiState.isNuclearLockActive) Color(0xFFFCA5A5) else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                if (uiState.isNuclearLockActive) {
+                    Surface(
+                        color = Color(0xFF450A0A),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(Icons.Filled.HourglassTop, contentDescription = null, tint = Color(0xFFFCA5A5), modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Time Left: ${uiState.nuclearFormattedRemaining}",
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color.White,
+                                fontSize = 16.sp
+                            )
+                        }
+                    }
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf(15, 30, 45, 60).forEach { mins ->
+                            FilterChip(
+                                selected = selectedNuclearMins == mins,
+                                onClick = { selectedNuclearMins = mins },
+                                label = { Text("${mins}m") },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+
+                    Button(
+                        onClick = { showNuclearConfirmDialog = true },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("arm_nuclear_lock_button"),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFFDC2626)
+                        )
+                    ) {
+                        Icon(Icons.Filled.Warning, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Arm Nuclear Lock ($selectedNuclearMins Mins)", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        if (showNuclearConfirmDialog) {
+            AlertDialog(
+                onDismissRequest = { showNuclearConfirmDialog = false },
+                title = { Text("⚠️ Arm Nuclear Strict Lock?") },
+                text = {
+                    Text("Are you sure you want to arm Nuclear Lock for $selectedNuclearMins minutes? Once engaged, StudyGuard will block all social apps, distractions, and Settings tampering. You will not be able to cancel this until the timer expires!")
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            showNuclearConfirmDialog = false
+                            onActivateNuclearLock(selectedNuclearMins)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626))
+                    ) {
+                        Text("Arm Lockdown")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showNuclearConfirmDialog = false }) {
+                        Text("Cancel")
+                    }
+                }
+            )
         }
 
         // Test & Verify Section

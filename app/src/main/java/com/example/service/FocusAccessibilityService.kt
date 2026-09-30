@@ -10,6 +10,7 @@ import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.Toast
 import com.example.StudyGuardApp
 import com.example.ui.lock.BlockedOverlayActivity
+import com.example.util.EmergencyLockManager
 import com.example.util.ScheduledAutoLockManager
 import com.example.util.StudyPreferences
 import kotlinx.coroutines.CoroutineScope
@@ -28,7 +29,8 @@ class FocusAccessibilityService : AccessibilityService() {
         if (event == null) return
 
         val context = applicationContext
-        val isStudyActive = StudyPreferences.isStudyActive(context)
+        val isNuclearActive = EmergencyLockManager.getInstance(context).isNuclearLockActive()
+        val isStudyActive = StudyPreferences.isStudyActive(context) || isNuclearActive
         val packageName = event.packageName?.toString() ?: return
 
         // Ignore our own app & system essentials (system UI, launchers, input methods)
@@ -38,7 +40,7 @@ class FocusAccessibilityService : AccessibilityService() {
 
         // 1. YouTube Shorts Detection & Blocking (Allow regular study videos!)
         if (packageName == "com.google.android.youtube") {
-            if (isStudyActive && StudyPreferences.isBlockYouTubeShortsEnabled(context)) {
+            if ((isStudyActive && StudyPreferences.isBlockYouTubeShortsEnabled(context)) || isNuclearActive) {
                 handleYouTubeAccessibility(event)
             }
             return
@@ -46,14 +48,14 @@ class FocusAccessibilityService : AccessibilityService() {
 
         // 2. Prevent Uninstall & System Settings Tampering during Study Hours
         if (isSettingsOrInstallerPackage(packageName)) {
-            if (isStudyActive && StudyPreferences.isStrictUninstallLockEnabled(context)) {
+            if ((isStudyActive && StudyPreferences.isStrictUninstallLockEnabled(context)) || isNuclearActive) {
                 checkAndPreventUninstallAttempt(event)
             }
             return
         }
 
-        // 3. Distraction App Interception (Timer or Scheduled Auto-Lock Gate)
-        checkAndBlockDistractionApp(packageName, isStudyActive)
+        // 3. Distraction App Interception (Timer, Nuclear Lock, or Scheduled Auto-Lock Gate)
+        checkAndBlockDistractionApp(packageName, isStudyActive, isNuclearActive)
     }
 
     private fun handleYouTubeAccessibility(event: AccessibilityEvent) {
@@ -169,7 +171,16 @@ class FocusAccessibilityService : AccessibilityService() {
                     "Tampering and uninstallation are strictly locked during active study sessions."
                 )
 
-                launchBlockScreen("Uninstall Protection", false, "", 0, 0, 0)
+                val isNuclear = EmergencyLockManager.getInstance(applicationContext).isNuclearLockActive()
+                launchBlockScreen(
+                    appName = "Uninstall Protection",
+                    isScheduled = false,
+                    isNuclear = isNuclear,
+                    ruleName = "Uninstall Tamper Protection",
+                    remainingStudyMins = 0,
+                    requiredStudyMins = 0,
+                    studiedMins = 0
+                )
 
                 serviceScope.launch {
                     StudyGuardApp.instance.repository.logDistractionEvent(
@@ -201,7 +212,7 @@ class FocusAccessibilityService : AccessibilityService() {
         return false
     }
 
-    private fun checkAndBlockDistractionApp(packageName: String, isStudyActive: Boolean) {
+    private fun checkAndBlockDistractionApp(packageName: String, isStudyActive: Boolean, isNuclearActive: Boolean) {
         val now = System.currentTimeMillis()
         if (now - lastInterceptTime < 1200L) return
 
@@ -213,8 +224,8 @@ class FocusAccessibilityService : AccessibilityService() {
             val autoLockManager = ScheduledAutoLockManager(applicationContext)
             val autoLockStatus = autoLockManager.getActiveRule(todayMins)
 
-            // If timer is not active AND no auto-lock schedule rule is active, allow the app
-            if (!isStudyActive && autoLockStatus == null) {
+            // If timer is not active AND no nuclear lock AND no auto-lock schedule rule is active, allow the app
+            if (!isStudyActive && !isNuclearActive && autoLockStatus == null) {
                 return@launch
             }
 
@@ -227,11 +238,12 @@ class FocusAccessibilityService : AccessibilityService() {
                 packageName
             }
 
-            val isScheduled = !isStudyActive && autoLockStatus != null
-            val reason = if (isScheduled) {
-                "First study for ${autoLockStatus!!.remainingStudyMinutes} more mins today to unlock this app!"
-            } else {
-                "Distraction app locked until study session finishes."
+            val nuclearStatus = if (isNuclearActive) EmergencyLockManager.getInstance(applicationContext).checkStatus() else null
+            val isScheduled = !isStudyActive && !isNuclearActive && autoLockStatus != null
+            val reason = when {
+                isNuclearActive -> "☢️ Nuclear Total Lockout Active (${nuclearStatus?.formattedRemaining} remaining). No early exit permitted!"
+                isScheduled -> "First study for ${autoLockStatus!!.remainingStudyMinutes} more mins today to unlock this app!"
+                else -> "Distraction app locked until study session finishes."
             }
 
             StudyPreferences.setLastBlockedApp(applicationContext, appName, reason)
@@ -240,7 +252,8 @@ class FocusAccessibilityService : AccessibilityService() {
             launchBlockScreen(
                 appName = appName,
                 isScheduled = isScheduled,
-                ruleName = autoLockStatus?.rule?.name ?: "Scheduled Focus Gate",
+                isNuclear = isNuclearActive,
+                ruleName = if (isNuclearActive) "Nuclear Total Lockout" else (autoLockStatus?.rule?.name ?: "Scheduled Focus Gate"),
                 remainingStudyMins = autoLockStatus?.remainingStudyMinutes ?: 0,
                 requiredStudyMins = autoLockStatus?.rule?.requiredStudyMinutes ?: 0,
                 studiedMins = autoLockStatus?.completedStudyMinutes ?: todayMins
@@ -249,7 +262,7 @@ class FocusAccessibilityService : AccessibilityService() {
             StudyGuardApp.instance.repository.logDistractionEvent(
                 packageName = packageName,
                 appName = appName,
-                eventType = if (isScheduled) "SCHEDULED_AUTOLOCK_BLOCKED" else "APP_BLOCKED",
+                eventType = if (isNuclearActive) "NUCLEAR_LOCK_BLOCKED" else if (isScheduled) "SCHEDULED_AUTOLOCK_BLOCKED" else "APP_BLOCKED",
                 reason = reason
             )
         }
@@ -258,6 +271,7 @@ class FocusAccessibilityService : AccessibilityService() {
     private fun launchBlockScreen(
         appName: String,
         isScheduled: Boolean,
+        isNuclear: Boolean,
         ruleName: String,
         remainingStudyMins: Int,
         requiredStudyMins: Int,
@@ -269,6 +283,7 @@ class FocusAccessibilityService : AccessibilityService() {
                     Intent.FLAG_ACTIVITY_SINGLE_TOP
             putExtra(BlockedOverlayActivity.EXTRA_BLOCKED_APP_NAME, appName)
             putExtra(BlockedOverlayActivity.EXTRA_IS_SCHEDULED_LOCK, isScheduled)
+            putExtra(BlockedOverlayActivity.EXTRA_IS_NUCLEAR_LOCK, isNuclear)
             putExtra(BlockedOverlayActivity.EXTRA_RULE_NAME, ruleName)
             putExtra(BlockedOverlayActivity.EXTRA_REMAINING_STUDY_MINS, remainingStudyMins)
             putExtra(BlockedOverlayActivity.EXTRA_REQUIRED_STUDY_MINS, requiredStudyMins)

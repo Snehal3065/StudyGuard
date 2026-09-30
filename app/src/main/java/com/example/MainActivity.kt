@@ -31,6 +31,7 @@ import com.example.ui.screens.AchievementsScreen
 import com.example.ui.screens.AiStudyCoachScreen
 import com.example.ui.screens.AppShieldsScreen
 import com.example.ui.screens.ChromeExtensionHelpScreen
+import com.example.ui.screens.FlashcardsScreen
 import com.example.ui.screens.FocusDashboardScreen
 import com.example.ui.screens.FocusHistoryScreen
 import com.example.ui.screens.MusicSaverScreen
@@ -102,6 +103,7 @@ fun MainAppContent(viewModel: StudyViewModel, initialShowReminders: Boolean = fa
     var showHistoryOverlay by remember { mutableStateOf(false) }
     var showRemindersOverlay by remember { mutableStateOf(initialShowReminders) }
     var showAiCoachOverlay by remember { mutableStateOf(false) }
+    var showFlashcardsOverlay by remember { mutableStateOf(false) }
     var showMoreMenu by remember { mutableStateOf(false) }
     var badgeSubTab by remember { mutableIntStateOf(0) } // 0: Achievements, 1: Usage Stats
     var locksSelectedSubTab by remember { mutableIntStateOf(0) } // 0: Custom Locks, 1: Blocked Apps, 2: Laptop
@@ -130,13 +132,14 @@ fun MainAppContent(viewModel: StudyViewModel, initialShowReminders: Boolean = fa
     val selectedCoachRole by viewModel.selectedCoachRole.collectAsStateWithLifecycle()
 
     val hasOverlay = showSecurityOverlay || showChromeHelpOverlay || showBadgesOverlay ||
-            showHistoryOverlay || showRemindersOverlay || showAiCoachOverlay
+            showHistoryOverlay || showRemindersOverlay || showAiCoachOverlay || showFlashcardsOverlay
 
     // BackHandler: handle overlay dismissals and sub-screens
     BackHandler(enabled = hasOverlay || currentTab != MainTab.DASHBOARD) {
         when {
             showAiCoachOverlay -> showAiCoachOverlay = false
             showRemindersOverlay -> showRemindersOverlay = false
+            showFlashcardsOverlay -> showFlashcardsOverlay = false
             showSecurityOverlay -> showSecurityOverlay = false
             showChromeHelpOverlay -> showChromeHelpOverlay = false
             showBadgesOverlay -> showBadgesOverlay = false
@@ -195,6 +198,7 @@ fun MainAppContent(viewModel: StudyViewModel, initialShowReminders: Boolean = fa
                             StudyPreferences.ThemeMode.DARK -> Icons.Default.DarkMode
                             StudyPreferences.ThemeMode.LIGHT -> Icons.Default.LightMode
                             StudyPreferences.ThemeMode.SYSTEM -> Icons.Default.BrightnessAuto
+                            else -> Icons.Default.Palette
                         }
                         Icon(
                             imageVector = themeIcon,
@@ -314,6 +318,23 @@ fun MainAppContent(viewModel: StudyViewModel, initialShowReminders: Boolean = fa
                             )
 
                             DropdownMenuItem(
+                                text = { Text("Study Flashcards 🎴") },
+                                leadingIcon = {
+                                    Icon(Icons.Filled.Style, contentDescription = null, tint = SecondaryTeal)
+                                },
+                                onClick = {
+                                    showMoreMenu = false
+                                    showFlashcardsOverlay = true
+                                    showAiCoachOverlay = false
+                                    showRemindersOverlay = false
+                                    showSecurityOverlay = false
+                                    showChromeHelpOverlay = false
+                                    showBadgesOverlay = false
+                                    showHistoryOverlay = false
+                                }
+                            )
+
+                            DropdownMenuItem(
                                 text = { Text("Custom App Locks (Study-to-Unlock)") },
                                 leadingIcon = {
                                     Icon(Icons.Filled.LockClock, contentDescription = null, tint = TertiaryAmber)
@@ -419,6 +440,12 @@ fun MainAppContent(viewModel: StudyViewModel, initialShowReminders: Boolean = fa
                     )
                 }
 
+                showFlashcardsOverlay -> {
+                    FlashcardsScreen(
+                        onDismiss = { showFlashcardsOverlay = false }
+                    )
+                }
+
                 showSecurityOverlay -> {
                     SecurityScreen(
                         uiState = uiState,
@@ -427,6 +454,9 @@ fun MainAppContent(viewModel: StudyViewModel, initialShowReminders: Boolean = fa
                         },
                         onRefreshPermissions = {
                             viewModel.checkPermissions(context)
+                        },
+                        onActivateNuclearLock = { minutes ->
+                            viewModel.activateNuclearLock(minutes)
                         }
                     )
                 }
@@ -573,6 +603,9 @@ fun MainAppContent(viewModel: StudyViewModel, initialShowReminders: Boolean = fa
                                 },
                                 onToggleStudyTimer = {
                                     viewModel.toggleStudyTimer()
+                                },
+                                onActivateNuclearLock = { mins ->
+                                    viewModel.activateNuclearLock(mins)
                                 }
                             )
 
@@ -587,6 +620,9 @@ fun MainAppContent(viewModel: StudyViewModel, initialShowReminders: Boolean = fa
                                 },
                                 onToggleStudyTimer = {
                                     viewModel.toggleStudyTimer()
+                                },
+                                onActivateNuclearLock = { mins ->
+                                    viewModel.activateNuclearLock(mins)
                                 },
                                 onStartMarathon = { config ->
                                     viewModel.startMarathon(config)
@@ -633,6 +669,9 @@ fun MainAppContent(viewModel: StudyViewModel, initialShowReminders: Boolean = fa
                                 onToggleLoop = {
                                     viewModel.toggleLoopAudio()
                                 },
+                                onToggleShuffle = {
+                                    viewModel.toggleShuffleAudio()
+                                },
                                 onToggleFavorite = { trId, fav ->
                                     viewModel.toggleMusicFavorite(trId, fav)
                                 },
@@ -648,8 +687,8 @@ fun MainAppContent(viewModel: StudyViewModel, initialShowReminders: Boolean = fa
                                 onAddTrackToPlaylist = { plId, trId ->
                                     viewModel.addTrackToPlaylist(plId, trId)
                                 },
-                                onPlayPlaylist = { playlist ->
-                                    viewModel.playPlaylist(musicTracks)
+                                onPlayPlaylist = { playlist, isShuffle ->
+                                    viewModel.playPlaylistById(playlist.id, isShuffle)
                                 },
                                 onLoadPresets = {
                                     viewModel.loadDefaultMusicPresets()

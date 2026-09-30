@@ -46,12 +46,13 @@ fun MusicSaverScreen(
     onTogglePlayPause: () -> Unit,
     onStopAudio: () -> Unit,
     onToggleLoop: () -> Unit,
+    onToggleShuffle: () -> Unit = {},
     onToggleFavorite: (Long, Boolean) -> Unit,
     onDeleteTrack: (StudyMusicTrack) -> Unit,
     onCreatePlaylist: (name: String, desc: String, colorHex: String) -> Unit,
     onDeletePlaylist: (PlaylistEntity) -> Unit,
     onAddTrackToPlaylist: (playlistId: Long, trackId: Long) -> Unit,
-    onPlayPlaylist: (PlaylistEntity) -> Unit,
+    onPlayPlaylist: (PlaylistEntity, Boolean) -> Unit,
     onLoadPresets: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -212,7 +213,8 @@ fun MusicSaverScreen(
                 playerState = playerState,
                 onTogglePlayPause = onTogglePlayPause,
                 onStop = onStopAudio,
-                onToggleLoop = onToggleLoop
+                onToggleLoop = onToggleLoop,
+                onToggleShuffle = onToggleShuffle
             )
         }
 
@@ -385,7 +387,8 @@ fun MusicSaverScreen(
                     items(playlists, key = { it.id }) { playlist ->
                         PlaylistItemCard(
                             playlist = playlist,
-                            onPlayPlaylist = { onPlayPlaylist(playlist) },
+                            onPlayPlaylistOrdered = { onPlayPlaylist(playlist, false) },
+                            onPlayPlaylistShuffled = { onPlayPlaylist(playlist, true) },
                             onAddTracksClick = { playlistToAddTracksTo = playlist },
                             onDeleteClick = { onDeletePlaylist(playlist) }
                         )
@@ -623,7 +626,8 @@ fun MusicSaverScreen(
 @Composable
 fun PlaylistItemCard(
     playlist: PlaylistEntity,
-    onPlayPlaylist: () -> Unit,
+    onPlayPlaylistOrdered: () -> Unit,
+    onPlayPlaylistShuffled: () -> Unit,
     onAddTracksClick: () -> Unit,
     onDeleteClick: () -> Unit
 ) {
@@ -674,25 +678,35 @@ fun PlaylistItemCard(
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Button(
-                    onClick = onPlayPlaylist,
+                    onClick = onPlayPlaylistOrdered,
                     modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(containerColor = barColor)
+                    colors = ButtonDefaults.buttonColors(containerColor = barColor),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
                 ) {
                     Icon(Icons.Filled.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Play Playlist", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Text("In Order ▶️", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
 
                 OutlinedButton(
-                    onClick = onAddTracksClick,
-                    modifier = Modifier.weight(1f)
+                    onClick = onPlayPlaylistShuffled,
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
                 ) {
-                    Icon(Icons.Filled.PlaylistAdd, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Filled.Shuffle, contentDescription = null, modifier = Modifier.size(16.dp), tint = barColor)
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Add Tracks", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Text("Shuffle 🔀", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = barColor)
+                }
+
+                FilledTonalIconButton(
+                    onClick = onAddTracksClick,
+                    modifier = Modifier.size(38.dp)
+                ) {
+                    Icon(Icons.Filled.PlaylistAdd, contentDescription = "Add Tracks", modifier = Modifier.size(18.dp))
                 }
             }
         }
@@ -711,7 +725,8 @@ fun StudyMusicPlayerBar(
     playerState: AudioPlayerState,
     onTogglePlayPause: () -> Unit,
     onStop: () -> Unit,
-    onToggleLoop: () -> Unit
+    onToggleLoop: () -> Unit,
+    onToggleShuffle: () -> Unit = {}
 ) {
     val track = playerState.currentTrack ?: return
 
@@ -776,6 +791,15 @@ fun StudyMusicPlayerBar(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
+                    IconButton(onClick = onToggleShuffle, modifier = Modifier.size(36.dp)) {
+                        Icon(
+                            imageVector = Icons.Default.Shuffle,
+                            contentDescription = "Shuffle",
+                            tint = if (playerState.isShuffle) TertiaryAmber else Color(0xFF64748B),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
                     IconButton(onClick = onToggleLoop, modifier = Modifier.size(36.dp)) {
                         Icon(
                             imageVector = Icons.Default.Repeat,

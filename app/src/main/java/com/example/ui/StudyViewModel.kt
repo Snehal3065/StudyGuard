@@ -45,6 +45,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -65,7 +66,12 @@ data class StudyUiState(
     val selectedCategoryFilter: String = "All",
     val todayScreenTimeMs: Long = 0L,
     val todayDistractionTimeMs: Long = 0L,
-    val usageStatsList: List<AppUsageInfo> = emptyList()
+    val usageStatsList: List<AppUsageInfo> = emptyList(),
+    val currentThemeMode: StudyPreferences.ThemeMode = StudyPreferences.ThemeMode.SYSTEM,
+    val isNuclearLockActive: Boolean = false,
+    val nuclearRemainingSeconds: Long = 0L,
+    val nuclearFormattedRemaining: String = "00:00",
+    val showCelebrationConfetti: Boolean = false
 )
 
 class StudyViewModel(
@@ -73,11 +79,14 @@ class StudyViewModel(
     private val context: Context
 ) : ViewModel() {
 
+    private val emergencyLockManager = com.example.util.EmergencyLockManager.getInstance(context)
+
     private val _uiState = MutableStateFlow(
         StudyUiState(
             isStudyActive = StudyPreferences.isStudyActive(context),
             isYouTubeShortsBlocked = StudyPreferences.isBlockYouTubeShortsEnabled(context),
-            isStrictUninstallLockEnabled = StudyPreferences.isStrictUninstallLockEnabled(context)
+            isStrictUninstallLockEnabled = StudyPreferences.isStrictUninstallLockEnabled(context),
+            currentThemeMode = StudyPreferences.getThemeMode(context)
         )
     )
     val uiState: StateFlow<StudyUiState> = _uiState.asStateFlow()
@@ -174,15 +183,43 @@ class StudyViewModel(
     fun setThemeMode(mode: StudyPreferences.ThemeMode) {
         StudyPreferences.setThemeMode(context, mode)
         _themeMode.value = mode
+        _uiState.value = _uiState.value.copy(currentThemeMode = mode)
     }
 
     fun toggleThemeMode() {
         val next = when (_themeMode.value) {
-            StudyPreferences.ThemeMode.SYSTEM -> StudyPreferences.ThemeMode.LIGHT
-            StudyPreferences.ThemeMode.LIGHT -> StudyPreferences.ThemeMode.DARK
-            StudyPreferences.ThemeMode.DARK -> StudyPreferences.ThemeMode.SYSTEM
+            StudyPreferences.ThemeMode.SYSTEM -> StudyPreferences.ThemeMode.MIDNIGHT_OLED
+            StudyPreferences.ThemeMode.MIDNIGHT_OLED -> StudyPreferences.ThemeMode.COZY_LOFI
+            StudyPreferences.ThemeMode.COZY_LOFI -> StudyPreferences.ThemeMode.FOREST_ZEN
+            StudyPreferences.ThemeMode.FOREST_ZEN -> StudyPreferences.ThemeMode.DARK
+            StudyPreferences.ThemeMode.DARK -> StudyPreferences.ThemeMode.LIGHT
+            StudyPreferences.ThemeMode.LIGHT -> StudyPreferences.ThemeMode.SYSTEM
         }
         setThemeMode(next)
+    }
+
+    fun activateNuclearLock(minutes: Int) {
+        emergencyLockManager.activateNuclearLock(minutes)
+        startSession("☢️ Nuclear Total Lockout", minutes)
+        toggleStrictUninstallLock(true)
+        refreshNuclearLock()
+    }
+
+    fun refreshNuclearLock() {
+        val status = emergencyLockManager.checkStatus()
+        _uiState.value = _uiState.value.copy(
+            isNuclearLockActive = status.isActive,
+            nuclearRemainingSeconds = status.remainingSeconds,
+            nuclearFormattedRemaining = status.formattedRemaining
+        )
+    }
+
+    fun dismissConfetti() {
+        _uiState.value = _uiState.value.copy(showCelebrationConfetti = false)
+    }
+
+    fun triggerConfetti() {
+        _uiState.value = _uiState.value.copy(showCelebrationConfetti = true)
     }
 
     fun getTodayStudyMinutes(): Int {
@@ -217,6 +254,7 @@ class StudyViewModel(
     private fun startLocalTimerLoop() {
         viewModelScope.launch {
             while (true) {
+                refreshNuclearLock()
                 val active = StudyPreferences.isStudyActive(context)
                 if (active) {
                     val endTime = StudyPreferences.getSessionEndTime(context)
@@ -247,6 +285,7 @@ class StudyViewModel(
 
     fun completeCurrentSession() {
         viewModelScope.launch {
+            triggerConfetti()
             val sessionId = StudyPreferences.getCurrentSessionId(context)
             val startTime = StudyPreferences.getSessionStartTime(context)
             val plannedMinutes = StudyPreferences.getPlannedMinutes(context)
@@ -314,6 +353,9 @@ class StudyViewModel(
     }
 
     fun toggleStudyTimer(subject: String = "Focused Study", minutes: Int = 25) {
+        if (_uiState.value.isNuclearLockActive) {
+            return
+        }
         if (_uiState.value.isStudyActive) {
             stopSession()
         } else {
@@ -337,6 +379,9 @@ class StudyViewModel(
     }
 
     fun stopSession() {
+        if (_uiState.value.isNuclearLockActive) {
+            return
+        }
         viewModelScope.launch {
             val sessionId = StudyPreferences.getCurrentSessionId(context)
             val startTime = StudyPreferences.getSessionStartTime(context)
@@ -414,6 +459,10 @@ class StudyViewModel(
         StudyAudioPlayer.toggleLoop()
     }
 
+    fun toggleShuffleAudio() {
+        StudyAudioPlayer.toggleShuffle()
+    }
+
     fun toggleMusicFavorite(trackId: Long, isFavorite: Boolean) {
         viewModelScope.launch {
             repository.toggleMusicFavorite(trackId, isFavorite)
@@ -456,9 +505,22 @@ class StudyViewModel(
 
     fun getTracksForPlaylist(playlistId: Long) = repository.getTracksForPlaylist(playlistId)
 
-    fun playPlaylist(tracks: List<StudyMusicTrack>) {
+    fun playPlaylist(tracks: List<StudyMusicTrack>, isShuffle: Boolean = false) {
         if (tracks.isNotEmpty()) {
-            playTrack(tracks.first())
+            StudyAudioPlayer.playPlaylist(context, tracks, isShuffle = isShuffle)
+            viewModelScope.launch {
+                repository.recordMusicPlayedOrSaved()
+            }
+        }
+    }
+
+    fun playPlaylistById(playlistId: Long, isShuffle: Boolean = false) {
+        viewModelScope.launch {
+            val tracks = repository.getTracksForPlaylist(playlistId).first()
+            if (tracks.isNotEmpty()) {
+                StudyAudioPlayer.playPlaylist(context, tracks, isShuffle = isShuffle)
+                repository.recordMusicPlayedOrSaved()
+            }
         }
     }
 

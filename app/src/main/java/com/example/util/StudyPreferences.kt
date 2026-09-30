@@ -115,10 +115,13 @@ object StudyPreferences {
             ?: "Locked during active study session"
     }
 
-    enum class ThemeMode {
-        SYSTEM,
-        LIGHT,
-        DARK
+    enum class ThemeMode(val displayName: String, val emoji: String) {
+        SYSTEM("System Default", "📱"),
+        LIGHT("Classic Light", "☀️"),
+        DARK("Deep Slate", "🌙"),
+        MIDNIGHT_OLED("Midnight OLED", "🌌"),
+        COZY_LOFI("Cozy Lo-Fi", "☕"),
+        FOREST_ZEN("Forest Zen", "🌿")
     }
 
     fun getThemeMode(context: Context): ThemeMode {

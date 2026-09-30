@@ -59,18 +59,22 @@ fun StudyRoomScreen(
     onOpenReminders: () -> Unit = {},
     onToggleFloatingWidget: (Boolean) -> Unit,
     onNavigateToPermissions: () -> Unit,
+    onActivateNuclearLock: (Int) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     var subjectInput by remember { mutableStateOf("Calculus & Physics") }
     var selectedMinutes by remember { mutableStateOf(25) }
+    var nuclearMinutes by remember { mutableStateOf(30) }
     var customMinutesInput by remember { mutableStateOf("") }
     var showCustomDialog by remember { mutableStateOf(false) }
-    var studyModeTab by remember(marathonState.isActive) {
-        mutableStateOf(if (marathonState.isActive) 1 else 0)
+    var showNuclearWarningDialog by remember { mutableStateOf(false) }
+    var studyModeTab by remember(marathonState.isActive, uiState.isNuclearLockActive) {
+        mutableStateOf(if (marathonState.isActive) 1 else if (uiState.isNuclearLockActive) 2 else 0)
     }
 
     val presetDurations = listOf(15, 25, 45, 60, 90)
+    val nuclearPresetDurations = listOf(15, 30, 45, 60, 90, 120)
     val popularSubjects = listOf("Calculus", "Physics", "Computer Science", "Biology", "Literature", "Exam Prep")
 
     Column(
@@ -234,7 +238,7 @@ fun StudyRoomScreen(
             }
         }
 
-        // Study Mode Tab: Sprint Timer vs Long Study Marathon
+        // Study Mode Tab: Sprint Timer vs Long Study Marathon vs Total Lockout
         TabRow(
             selectedTabIndex = studyModeTab,
             containerColor = MaterialTheme.colorScheme.surface
@@ -248,7 +252,7 @@ fun StudyRoomScreen(
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Icon(Icons.Filled.Bolt, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Text("Focus Sprint", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        Text("Sprint", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                     }
                 }
             )
@@ -261,48 +265,93 @@ fun StudyRoomScreen(
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Icon(Icons.Filled.HourglassTop, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Text(if (marathonState.isActive) "Active Marathon ⏳" else "Study Marathon ⏳", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        Text(if (marathonState.isActive) "Marathon ⏳" else "Marathon ⏳", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    }
+                }
+            )
+            Tab(
+                selected = studyModeTab == 2,
+                onClick = { studyModeTab = 2 },
+                text = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            Icons.Filled.Lock,
+                            contentDescription = null,
+                            tint = if (studyModeTab == 2 || uiState.isNuclearLockActive) Color(0xFFEF4444) else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = if (uiState.isNuclearLockActive) "Locked ☢️" else "Total Lockout ☢️",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            color = if (studyModeTab == 2 || uiState.isNuclearLockActive) Color(0xFFEF4444) else MaterialTheme.colorScheme.onSurface
+                        )
                     }
                 }
             )
         }
 
         // Mode Content
-        if (studyModeTab == 1) {
-            // Marathon Mode: Long Study Hours (e.g. 45m study / 15m break x 4 cycles)
-            if (marathonState.isActive) {
-                ActiveMarathonCard(
-                    marathonState = marathonState,
-                    onPause = onPauseMarathon,
-                    onResume = onResumeMarathon,
-                    onSkipBreak = onSkipMarathonBreak,
-                    onStop = onStopMarathon
-                )
-            } else {
-                MarathonSetupCard(
-                    onStartMarathon = onStartMarathon
-                )
+        when {
+            studyModeTab == 1 -> {
+                // Marathon Mode: Long Study Hours (e.g. 45m study / 15m break x 4 cycles)
+                if (marathonState.isActive) {
+                    ActiveMarathonCard(
+                        marathonState = marathonState,
+                        onPause = onPauseMarathon,
+                        onResume = onResumeMarathon,
+                        onSkipBreak = onSkipMarathonBreak,
+                        onStop = onStopMarathon
+                    )
+                } else {
+                    MarathonSetupCard(
+                        onStartMarathon = onStartMarathon
+                    )
+                }
             }
-        } else {
-            // Single Focus Session Card
-            if (uiState.isStudyActive && !marathonState.isActive) {
-                ActiveSessionCard(
-                    uiState = uiState,
-                    onStopSession = onStopSession
-                )
-            } else {
-                SessionSetupCard(
-                    subjectInput = subjectInput,
-                    onSubjectChange = { subjectInput = it },
-                    popularSubjects = popularSubjects,
-                    selectedMinutes = selectedMinutes,
-                    presetDurations = presetDurations,
-                    onSelectDuration = { selectedMinutes = it },
-                    onCustomDurationClick = { showCustomDialog = true },
-                    onStartSession = {
-                        onStartSession(subjectInput, selectedMinutes)
-                    }
-                )
+
+            studyModeTab == 2 -> {
+                // Total Lockout Mode (Strict Nuclear Lock)
+                if (uiState.isStudyActive) {
+                    ActiveSessionCard(
+                        uiState = uiState,
+                        onStopSession = onStopSession
+                    )
+                } else {
+                    NuclearTotalLockoutSetupCard(
+                        selectedMinutes = nuclearMinutes,
+                        presetDurations = nuclearPresetDurations,
+                        onSelectDuration = { nuclearMinutes = it },
+                        onCustomDurationClick = { showCustomDialog = true },
+                        onStartNuclearLockout = { showNuclearWarningDialog = true }
+                    )
+                }
+            }
+
+            else -> {
+                // Single Focus Session Card (Sprint)
+                if (uiState.isStudyActive && !marathonState.isActive) {
+                    ActiveSessionCard(
+                        uiState = uiState,
+                        onStopSession = onStopSession
+                    )
+                } else {
+                    SessionSetupCard(
+                        subjectInput = subjectInput,
+                        onSubjectChange = { subjectInput = it },
+                        popularSubjects = popularSubjects,
+                        selectedMinutes = selectedMinutes,
+                        presetDurations = presetDurations,
+                        onSelectDuration = { selectedMinutes = it },
+                        onCustomDurationClick = { showCustomDialog = true },
+                        onStartSession = {
+                            onStartSession(subjectInput, selectedMinutes)
+                        }
+                    )
+                }
             }
         }
 
@@ -345,7 +394,11 @@ fun StudyRoomScreen(
                 Button(
                     onClick = {
                         val mins = customMinutesInput.toIntOrNull() ?: 25
-                        selectedMinutes = mins.coerceIn(5, 360)
+                        if (studyModeTab == 2) {
+                            nuclearMinutes = mins.coerceIn(5, 360)
+                        } else {
+                            selectedMinutes = mins.coerceIn(5, 360)
+                        }
                         showCustomDialog = false
                     }
                 ) {
@@ -355,6 +408,83 @@ fun StudyRoomScreen(
             dismissButton = {
                 TextButton(onClick = { showCustomDialog = false }) {
                     Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // High-Impact Nuclear Total Lockout Warning Dialog
+    if (showNuclearWarningDialog) {
+        AlertDialog(
+            onDismissRequest = { showNuclearWarningDialog = false },
+            icon = {
+                Icon(
+                    imageVector = Icons.Filled.Warning,
+                    contentDescription = null,
+                    tint = Color(0xFFDC2626),
+                    modifier = Modifier.size(36.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "TOTAL PHONE LOCKOUT WARNING",
+                    fontWeight = FontWeight.Black,
+                    fontSize = 17.sp,
+                    color = Color(0xFFDC2626),
+                    textAlign = TextAlign.Center
+                )
+            },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "For the next $nuclearMinutes minutes, your phone is TOTALLY LOCKED to study mode.",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                    )
+                    Text(
+                        text = "• Distracted apps (YouTube Shorts, Social Media, Games) are 100% blocked.\n• System Settings & app uninstallation are locked.\n• You will NOT be able to close, cancel, or stop this session at all until the timer finishes!",
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Surface(
+                        color = Color(0xFF450A0A),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "⛔ Once you click Continue, there is NO WAY to stop it.",
+                            color = Color(0xFFFCA5A5),
+                            fontWeight = FontWeight.Black,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(10.dp),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showNuclearWarningDialog = false
+                        onActivateNuclearLock(nuclearMinutes)
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.testTag("confirm_nuclear_lock_button")
+                ) {
+                    Text("Continue — Lock Me Out! ☢️", fontWeight = FontWeight.Black)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showNuclearWarningDialog = false },
+                    modifier = Modifier.testTag("cancel_nuclear_lock_button")
+                ) {
+                    Text("Cancel / Go Back", fontWeight = FontWeight.Bold)
                 }
             }
         )
@@ -474,13 +604,13 @@ fun ActiveSessionCard(
                     modifier = Modifier
                         .size(10.dp)
                         .clip(CircleShape)
-                        .background(Color(0xFF10B981))
+                        .background(if (uiState.isNuclearLockActive) Color(0xFFEF4444) else Color(0xFF10B981))
                 )
                 Text(
-                    text = "STUDY SESSION IN PROGRESS",
+                    text = if (uiState.isNuclearLockActive) "☢️ NUCLEAR TOTAL LOCKOUT ACTIVE" else "STUDY SESSION IN PROGRESS",
                     style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = PrimaryIndigoLight,
+                    fontWeight = FontWeight.Black,
+                    color = if (uiState.isNuclearLockActive) Color(0xFFEF4444) else PrimaryIndigoLight,
                     letterSpacing = 1.sp
                 )
             }
@@ -558,17 +688,41 @@ fun ActiveSessionCard(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            OutlinedButton(
-                onClick = onStopSession,
-                modifier = Modifier.fillMaxWidth().testTag("end_study_session_button"),
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = MaterialTheme.colorScheme.error
-                )
-            ) {
-                Icon(Icons.Default.Stop, contentDescription = null)
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("End Study Session Early")
+            if (uiState.isNuclearLockActive) {
+                Surface(
+                    color = Color(0xFF450A0A),
+                    shape = RoundedCornerShape(14.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFFEF4444)),
+                    modifier = Modifier.fillMaxWidth().testTag("locked_nuclear_session_indicator")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(Icons.Default.Lock, contentDescription = null, tint = Color(0xFFFCA5A5), modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "☢️ Total Lockout Active (${uiState.nuclearFormattedRemaining}) • Unbreakable",
+                            fontWeight = FontWeight.Black,
+                            color = Color(0xFFFCA5A5),
+                            fontSize = 13.sp
+                        )
+                    }
+                }
+            } else {
+                OutlinedButton(
+                    onClick = onStopSession,
+                    modifier = Modifier.fillMaxWidth().testTag("end_study_session_button"),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Icon(Icons.Default.Stop, contentDescription = null)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("End Study Session Early")
+                }
             }
         }
     }
@@ -786,6 +940,167 @@ fun ProtectionRow(title: String, subtitle: String, isActive: Boolean) {
         Column(modifier = Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
             Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+fun NuclearTotalLockoutSetupCard(
+    selectedMinutes: Int,
+    presetDurations: List<Int>,
+    onSelectDuration: (Int) -> Unit,
+    onCustomDurationClick: () -> Unit,
+    onStartNuclearLockout: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFF1E1B4B)
+        ),
+        border = androidx.compose.foundation.BorderStroke(2.dp, Color(0xFFDC2626)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFFDC2626).copy(alpha = 0.2f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Lock,
+                        contentDescription = null,
+                        tint = Color(0xFFEF4444),
+                        modifier = Modifier.size(26.dp)
+                    )
+                }
+                Column {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = "Nuclear Total Lockout",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Black,
+                            color = Color.White
+                        )
+                        Surface(
+                            color = Color(0xFFDC2626),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                text = "STRICT",
+                                color = Color.White,
+                                fontWeight = FontWeight.Black,
+                                fontSize = 10.sp,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                    Text(
+                        text = "Unbreakable commitment. No early stopping.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFFCBD5E1)
+                    )
+                }
+            }
+
+            // Warning Notice Box
+            Surface(
+                color = Color(0xFF450A0A),
+                shape = RoundedCornerShape(12.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF7F1D1D)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text("⚠️", fontSize = 18.sp)
+                    Text(
+                        text = "Selecting this mode will completely lock your phone from distraction apps. You will NOT be able to close, cancel, or stop it early!",
+                        color = Color(0xFFFCA5A5),
+                        fontSize = 12.sp,
+                        lineHeight = 16.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+
+            // Duration Selector
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "SELECT LOCKOUT DURATION",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF94A3B8),
+                    letterSpacing = 0.5.sp
+                )
+
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(presetDurations) { duration ->
+                        FilterChip(
+                            selected = selectedMinutes == duration,
+                            onClick = { onSelectDuration(duration) },
+                            label = { Text("${duration}m", fontWeight = FontWeight.Bold) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Color(0xFFDC2626),
+                                selectedLabelColor = Color.White
+                            ),
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                    }
+                    item {
+                        FilterChip(
+                            selected = !presetDurations.contains(selectedMinutes),
+                            onClick = onCustomDurationClick,
+                            label = {
+                                Text(
+                                    if (!presetDurations.contains(selectedMinutes)) "${selectedMinutes}m" else "Custom",
+                                    fontWeight = FontWeight.Bold
+                                )
+                            },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Color(0xFFDC2626),
+                                selectedLabelColor = Color.White
+                            ),
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                    }
+                }
+            }
+
+            // Big Action Button
+            Button(
+                onClick = onStartNuclearLockout,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(54.dp)
+                    .testTag("start_nuclear_lockout_button"),
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFFDC2626)
+                ),
+                elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp)
+            ) {
+                Icon(Icons.Filled.Warning, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Engage Total Lockout (${selectedMinutes} min) ☢️",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Black
+                )
+            }
         }
     }
 }

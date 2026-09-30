@@ -14,6 +14,7 @@ import androidx.core.app.NotificationCompat
 import com.example.MainActivity
 import com.example.R
 import com.example.StudyGuardApp
+import com.example.util.EmergencyLockManager
 import com.example.util.StudyPreferences
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -36,6 +37,9 @@ class StudyFocusService : Service() {
                 startTimerLoop()
             }
             ACTION_STOP -> {
+                if (EmergencyLockManager.getInstance(applicationContext).isNuclearLockActive()) {
+                    return START_STICKY
+                }
                 stopTimerLoop()
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
@@ -68,10 +72,19 @@ class StudyFocusService : Service() {
                 val timeString = String.format("%02d:%02d", minutes, seconds)
                 val subject = StudyPreferences.getSessionSubject(applicationContext)
 
-                val notification = buildNotification(
-                    title = "📚 $subject: $timeString remaining",
-                    contentText = "Distraction apps locked. YouTube Shorts protected."
-                )
+                val isNuclear = EmergencyLockManager.getInstance(applicationContext).isNuclearLockActive()
+                val notification = if (isNuclear) {
+                    val status = EmergencyLockManager.getInstance(applicationContext).checkStatus()
+                    buildNotification(
+                        title = "☢️ Total Lockout: ${status.formattedRemaining} remaining",
+                        contentText = "Phone is completely locked to focus. Unstoppable until 00:00."
+                    )
+                } else {
+                    buildNotification(
+                        title = "📚 $subject: $timeString remaining",
+                        contentText = "Distraction apps locked. YouTube Shorts protected."
+                    )
+                }
                 val manager = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
                 manager.notify(NOTIFICATION_ID, notification)
 

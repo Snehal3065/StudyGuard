@@ -54,6 +54,8 @@ class BlockedOverlayActivity : ComponentActivity() {
         val remainingStudyMins = intent.getIntExtra(EXTRA_REMAINING_STUDY_MINS, 60)
         val requiredStudyMins = intent.getIntExtra(EXTRA_REQUIRED_STUDY_MINS, 120)
         val studiedMins = intent.getIntExtra(EXTRA_STUDIED_MINS, 0)
+        val isNuclear = intent.getBooleanExtra(EXTRA_IS_NUCLEAR_LOCK, false) ||
+                com.example.util.EmergencyLockManager.getInstance(this).isNuclearLockActive()
 
         val themeMode = StudyPreferences.getThemeMode(this)
 
@@ -63,6 +65,7 @@ class BlockedOverlayActivity : ComponentActivity() {
                     blockedAppName = appName,
                     blockedReason = reason,
                     isScheduledLock = isScheduled,
+                    isNuclearLock = isNuclear,
                     ruleName = ruleName,
                     remainingStudyMins = remainingStudyMins,
                     requiredStudyMins = requiredStudyMins,
@@ -94,6 +97,7 @@ class BlockedOverlayActivity : ComponentActivity() {
     companion object {
         const val EXTRA_BLOCKED_APP_NAME = "extra_blocked_app_name"
         const val EXTRA_IS_SCHEDULED_LOCK = "extra_is_scheduled_lock"
+        const val EXTRA_IS_NUCLEAR_LOCK = "extra_is_nuclear_lock"
         const val EXTRA_RULE_NAME = "extra_rule_name"
         const val EXTRA_REMAINING_STUDY_MINS = "extra_remaining_study_mins"
         const val EXTRA_REQUIRED_STUDY_MINS = "extra_required_study_mins"
@@ -106,6 +110,7 @@ fun BlockedScreenContent(
     blockedAppName: String,
     blockedReason: String,
     isScheduledLock: Boolean,
+    isNuclearLock: Boolean = false,
     ruleName: String,
     remainingStudyMins: Int,
     requiredStudyMins: Int,
@@ -120,16 +125,19 @@ fun BlockedScreenContent(
     var showEmergencyDialog by remember { mutableStateOf(false) }
 
     // Live countdown updater for active timer session
-    LaunchedEffect(isScheduledLock) {
-        if (!isScheduledLock) {
-            while (true) {
+    LaunchedEffect(isScheduledLock, isNuclearLock) {
+        while (true) {
+            val left = if (isNuclearLock) {
+                com.example.util.EmergencyLockManager.getInstance(context).checkStatus().remainingSeconds
+            } else if (!isScheduledLock) {
                 val endTime = StudyPreferences.getSessionEndTime(context)
                 val now = System.currentTimeMillis()
-                val left = (endTime - now) / 1000L
-                remainingSeconds = left.coerceAtLeast(0L)
-                if (left <= 0) break
-                delay(1000L)
-            }
+                (endTime - now) / 1000L
+            } else 0L
+
+            remainingSeconds = left.coerceAtLeast(0L)
+            if (!isScheduledLock && !isNuclearLock && left <= 0) break
+            delay(1000L)
         }
     }
 
@@ -423,23 +431,47 @@ fun BlockedScreenContent(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Emergency Unlock option
-            TextButton(
-                onClick = { showEmergencyDialog = true },
-                modifier = Modifier.testTag("emergency_unlock_button")
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Security,
-                    contentDescription = null,
-                    tint = Color(0xFF94A3B8),
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = "Emergency Unlock Pass",
-                    color = Color(0xFF94A3B8),
-                    fontSize = 13.sp
-                )
+            // Emergency Unlock option (Disabled in Nuclear Lockout)
+            if (isNuclearLock) {
+                Surface(
+                    color = Color(0xFF450A0A),
+                    shape = RoundedCornerShape(12.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFDC2626)),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(Icons.Default.Lock, contentDescription = null, tint = Color(0xFFFCA5A5), modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "☢️ Nuclear Lockout: Emergency pass disabled",
+                            color = Color(0xFFFCA5A5),
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+            } else {
+                TextButton(
+                    onClick = { showEmergencyDialog = true },
+                    modifier = Modifier.testTag("emergency_unlock_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Security,
+                        contentDescription = null,
+                        tint = Color(0xFF94A3B8),
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Emergency Unlock Pass",
+                        color = Color(0xFF94A3B8),
+                        fontSize = 13.sp
+                    )
+                }
             }
         }
     }
