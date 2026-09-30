@@ -16,7 +16,9 @@ jobs:
         with:
           gradle-version: 9.3.1
       - name: Create .env
-        run: echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" > .env
+        env:
+          GEMINI_SECRET: ${{ secrets.GEMINI_API_KEY }}
+        run: echo "GEMINI_API_KEY=${GEMINI_SECRET:-MY_GEMINI_API_KEY}" > .env
       - name: Create debug keystore
         run: |
           keytool -genkeypair -keystore debug.keystore \
