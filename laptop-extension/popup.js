@@ -17,8 +17,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     chrome.windows.create({
       url: chrome.runtime.getURL('music.html'),
       type: 'popup',
-      width: 480,
-      height: 720,
+      width: 360,
+      height: 270,
       focused: true
     });
   }
@@ -368,6 +368,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     engine.setVolume(parseFloat(e.target.value));
   });
 
+  const btnPopupShuffle = document.getElementById('btnPopupShuffle');
+  if (btnPopupShuffle) {
+    btnPopupShuffle.addEventListener('click', () => {
+      engine.toggleShuffle();
+      btnPopupShuffle.textContent = engine.isShuffle ? '🔀 Shuffle: ON' : '🔀 Shuffle: OFF';
+      btnPopupShuffle.style.color = engine.isShuffle ? '#818CF8' : '#94A3B8';
+      btnPopupShuffle.style.background = engine.isShuffle ? 'rgba(99,102,241,0.2)' : 'rgba(255,255,255,0.06)';
+    });
+  }
+
   btnPopupLoop.addEventListener('click', () => {
     engine.toggleLoop();
     btnPopupLoop.textContent = engine.isLooping ? '🔁 Loop: ON' : '➡️ Loop: OFF';
@@ -488,23 +498,32 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       row.innerHTML = `
         <div style="flex: 1; min-width: 0;">
-          <div style="font-size: 12.5px; font-weight: 800; color: white;">${pl.name}</div>
+          <div style="font-size: 12px; font-weight: 800; color: white;">${pl.name}</div>
           <div style="font-size: 10px; color: #94A3B8;">${pl.trackIds ? pl.trackIds.length : 0} study tracks</div>
         </div>
         <div style="display: flex; gap: 4px; align-items: center;">
-          <button type="button" class="btn-del-pl btn-fav-small" title="Delete Playlist" style="font-size: 11px; opacity: 0.7;">
-            🗑️
+          <button type="button" class="btn-action btn-play-order" title="Play In Order (Sequential)" style="padding: 4px 7px; font-size: 9.5px; width: auto; background: ${pl.colorHex}; border-radius: 6px;">
+            ▶️ Order
           </button>
-          <button type="button" class="btn-action btn-play-pl" style="padding: 4px 10px; font-size: 10px; width: auto; background: ${pl.colorHex};">
-            Play ▶
+          <button type="button" class="btn-action btn-play-shuffle" title="Play Shuffled (Randomized)" style="padding: 4px 7px; font-size: 9.5px; width: auto; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.15); border-radius: 6px;">
+            🔀 Shuffle
+          </button>
+          <button type="button" class="btn-del-pl btn-fav-small" title="Delete Playlist" style="font-size: 11px; opacity: 0.7; padding: 2px;">
+            🗑️
           </button>
         </div>
       `;
 
-      const btnPlay = row.querySelector('.btn-play-pl');
-      btnPlay.addEventListener('click', (e) => {
+      const btnOrder = row.querySelector('.btn-play-order');
+      btnOrder.addEventListener('click', (e) => {
         e.stopPropagation();
-        engine.playPlaylist(pl, allTracks);
+        engine.playPlaylist(pl, allTracks, false);
+      });
+
+      const btnShuffle = row.querySelector('.btn-play-shuffle');
+      btnShuffle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        engine.playPlaylist(pl, allTracks, true);
       });
 
       const btnDel = row.querySelector('.btn-del-pl');

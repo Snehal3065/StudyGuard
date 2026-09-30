@@ -24,6 +24,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   const btnPrev = document.getElementById('btnPrev');
   const btnNext = document.getElementById('btnNext');
   const btnLoop = document.getElementById('btnLoop');
+  const btnShuffle = document.getElementById('btnShuffle');
+  const btnToggleCompact = document.getElementById('btnToggleCompact');
   const seekSlider = document.getElementById('seekSlider');
   const volumeSlider = document.getElementById('volumeSlider');
   const currentTimeText = document.getElementById('currentTimeText');
@@ -117,6 +119,53 @@ document.addEventListener('DOMContentLoaded', async () => {
     engine.toggleLoop();
     btnLoop.classList.toggle('active', engine.isLooping);
   });
+
+  const labelCurrentMode = document.getElementById('labelCurrentMode');
+  const labelPlaylistName = document.getElementById('labelPlaylistName');
+
+  function updateModeLabel() {
+    if (labelCurrentMode) {
+      labelCurrentMode.textContent = engine.isShuffle ? 'Mode: 🔀 Shuffled' : 'Mode: ➡️ In Order';
+    }
+    if (labelPlaylistName) {
+      labelPlaylistName.textContent = engine.currentPlaylist ? engine.currentPlaylist.name : 'Focus Presets';
+    }
+  }
+
+  if (btnShuffle) {
+    btnShuffle.addEventListener('click', () => {
+      engine.toggleShuffle();
+      btnShuffle.classList.toggle('active', engine.isShuffle);
+      updateModeLabel();
+    });
+  }
+
+  if (btnToggleCompact) {
+    btnToggleCompact.addEventListener('click', () => {
+      document.body.classList.toggle('compact-mode');
+      const isCompact = document.body.classList.contains('compact-mode');
+      btnToggleCompact.textContent = isCompact ? '⤢ Make Bigger' : '⤡ Make Smaller';
+      try {
+        localStorage.setItem('studyguard_compact_music', isCompact ? '1' : '0');
+        if (window.resizeTo) {
+          if (isCompact) {
+            window.resizeTo(360, 270);
+          } else {
+            window.resizeTo(520, 720);
+          }
+        }
+      } catch (_) {}
+    });
+
+    const savedCompact = localStorage.getItem('studyguard_compact_music');
+    if (savedCompact === '0') {
+      document.body.classList.remove('compact-mode');
+      btnToggleCompact.textContent = '⤡ Make Smaller';
+    } else {
+      document.body.classList.add('compact-mode');
+      btnToggleCompact.textContent = '⤢ Make Bigger';
+    }
+  }
 
   seekSlider.addEventListener('input', (e) => {
     engine.seekTo(parseFloat(e.target.value));
@@ -335,16 +384,28 @@ document.addEventListener('DOMContentLoaded', async () => {
           <div class="playlist-desc">${pl.description || 'Focus study playlist'}</div>
         </div>
         <div class="playlist-footer">
-          <span>${pl.trackIds ? pl.trackIds.length : 0} tracks</span>
-          <button type="button" class="btn-primary btn-play-pl" style="padding: 4px 10px; font-size: 11px; background: ${pl.colorHex};">
-            Play ▶
-          </button>
+          <span style="font-size: 11px; color: #94A3B8;">${pl.trackIds ? pl.trackIds.length : 0} tracks</span>
+          <div style="display: flex; gap: 6px;">
+            <button type="button" class="btn-primary btn-play-order" style="padding: 4px 8px; font-size: 10.5px; background: ${pl.colorHex};">
+              ▶️ Order
+            </button>
+            <button type="button" class="btn-secondary btn-play-shuffle" style="padding: 4px 8px; font-size: 10.5px;">
+              🔀 Shuffle
+            </button>
+          </div>
         </div>
       `;
 
-      card.querySelector('.btn-play-pl').addEventListener('click', (e) => {
+      card.querySelector('.btn-play-order').addEventListener('click', (e) => {
         e.stopPropagation();
-        engine.playPlaylist(pl, allTracks);
+        engine.playPlaylist(pl, allTracks, false);
+        updateModeLabel();
+      });
+
+      card.querySelector('.btn-play-shuffle').addEventListener('click', (e) => {
+        e.stopPropagation();
+        engine.playPlaylist(pl, allTracks, true);
+        updateModeLabel();
       });
 
       card.querySelector('.btn-del-pl').addEventListener('click', async (e) => {

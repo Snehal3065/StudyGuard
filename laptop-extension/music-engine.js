@@ -19,6 +19,7 @@ class StudyMusicEngine {
     // Active playlist queue
     this.currentPlaylist = null;
     this.playlistIndex = 0;
+    this.isShuffle = false;
 
     this.initStorage();
   }
@@ -40,12 +41,19 @@ class StudyMusicEngine {
       currentTrack: this.currentTrack,
       isPlaying: this.isPlaying,
       isLooping: this.isLooping,
+      isShuffle: this.isShuffle,
       volume: this.volume,
       currentTime: Math.floor(this.currentTime),
       duration: Math.floor(this.duration),
       formattedCurrentTime: this.formatTime(this.currentTime),
       formattedDuration: this.formatTime(this.duration)
     };
+  }
+
+  toggleShuffle() {
+    this.isShuffle = !this.isShuffle;
+    this.notifyStateChange();
+    return this.isShuffle;
   }
 
   formatTime(seconds) {
@@ -400,26 +408,37 @@ class StudyMusicEngine {
     this.notifyStateChange();
   }
 
-  async playPlaylist(playlist, allTracks) {
+  async playPlaylist(playlist, allTracks, forceShuffle = null) {
     if (!playlist || !playlist.trackIds || playlist.trackIds.length === 0) return;
     this.currentPlaylist = playlist;
-    this.playlistIndex = 0;
-    const firstTrackId = playlist.trackIds[0];
-    const track = allTracks.find(t => t.id === firstTrackId);
+    if (forceShuffle !== null) {
+      this.isShuffle = !!forceShuffle;
+    }
+    if (this.isShuffle) {
+      this.playlistIndex = Math.floor(Math.random() * playlist.trackIds.length);
+    } else {
+      this.playlistIndex = 0;
+    }
+    const trackId = playlist.trackIds[this.playlistIndex];
+    const track = allTracks.find(t => t.id === trackId);
     if (track) {
       await this.playTrack(track);
     }
   }
 
   playNextInPlaylist(allTracks) {
-    if (!this.currentPlaylist) return;
-    this.playlistIndex++;
-    if (this.playlistIndex >= this.currentPlaylist.trackIds.length) {
-      if (this.isLooping) {
-        this.playlistIndex = 0;
-      } else {
-        this.stop();
-        return;
+    if (!this.currentPlaylist || !this.currentPlaylist.trackIds || this.currentPlaylist.trackIds.length === 0) return;
+    if (this.isShuffle) {
+      this.playlistIndex = Math.floor(Math.random() * this.currentPlaylist.trackIds.length);
+    } else {
+      this.playlistIndex++;
+      if (this.playlistIndex >= this.currentPlaylist.trackIds.length) {
+        if (this.isLooping) {
+          this.playlistIndex = 0;
+        } else {
+          this.stop();
+          return;
+        }
       }
     }
     const nextTrackId = this.currentPlaylist.trackIds[this.playlistIndex];

@@ -622,8 +622,8 @@
       <div class="profile-subtitle">Desktop Study & Music Studio</div>
       <div id="statusBadge" class="status-pill">⚡ SHIELD ACTIVE</div>
     </div>
-    <button type="button" id="btnPopOutMusic" style="background: rgba(99, 102, 241, 0.2); border: 1px solid rgba(99, 102, 241, 0.4); color: #818CF8; border-radius: 8px; padding: 6px 8px; font-size: 11px; cursor: pointer; font-weight: 700;" title="Open Fullscreen Music Studio in Tab">
-      🎵 Pop Out ↗️
+    <button type="button" id="btnPopOutMusic" style="background: rgba(99, 102, 241, 0.2); border: 1px solid rgba(99, 102, 241, 0.4); color: #818CF8; border-radius: 8px; padding: 6px 10px; font-size: 11px; cursor: pointer; font-weight: 700; white-space: nowrap;" title="Open Floating Mini Music Player">
+      🎵 Mini Player ↗️
     </button>
   </div>
 
@@ -783,15 +783,20 @@
       <!-- Injected via popup.js -->
     </div>
 
-    <!-- Volume & Loop Slider -->
-    <div style="display: flex; align-items: center; justify-content: space-between; background: #131D31; padding: 6px 12px; border-radius: 8px; margin-bottom: 6px;">
+    <!-- Volume, Shuffle & Loop Controls -->
+    <div style="display: flex; align-items: center; justify-content: space-between; background: #131D31; padding: 6px 10px; border-radius: 8px; margin-bottom: 6px;">
       <div style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: #94A3B8;">
-        <span>🔊 Vol</span>
-        <input type="range" id="popupVolumeSlider" min="0" max="1" step="0.05" value="0.8" style="width: 80px; height: 4px; accent-color: #818CF8; cursor: pointer;">
+        <span>🔊</span>
+        <input type="range" id="popupVolumeSlider" min="0" max="1" step="0.05" value="0.8" style="width: 65px; height: 4px; accent-color: #818CF8; cursor: pointer;">
       </div>
-      <button type="button" id="btnPopupLoop" style="background: none; border: none; color: #818CF8; font-size: 11px; font-weight: bold; cursor: pointer;">
-        🔁 Loop: ON
-      </button>
+      <div style="display: flex; gap: 6px;">
+        <button type="button" id="btnPopupShuffle" style="background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); color: #94A3B8; font-size: 10px; font-weight: bold; cursor: pointer; padding: 3px 7px; border-radius: 6px;">
+          🔀 Shuffle: OFF
+        </button>
+        <button type="button" id="btnPopupLoop" style="background: rgba(99,102,241,0.15); border: 1px solid rgba(99,102,241,0.3); color: #818CF8; font-size: 10px; font-weight: bold; cursor: pointer; padding: 3px 7px; border-radius: 6px;">
+          🔁 Loop: ON
+        </button>
+      </div>
     </div>
   </div>
 
