@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>StudyGuard Controller</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    }
+    body {
+      width: 380px;
+      background: #0B0F19;
+      color: #F8FAFC;
+      padding: 16px;
+      font-size: 13px;
+      overflow-x: hidden;
+      max-height: 580px;
+      overflow-y: auto;
+    }
+    
+    /* Profile Header */
+    .profile-card {
+      background: linear-gradient(135deg, #1E1B4B 0%, #172554 100%);
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      border-radius: 16px;
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    }
+    .avatar-wrapper {
+      position: relative;
+      width: 46px;
+      height: 46px;
+      flex-shrink: 0;
+    }
+    .avatar-img {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 2px solid #818CF8;
+    }
+    .avatar-badge {
+      position: absolute;
+      bottom: -2px;
+      right: -2px;
+      width: 14px;
+      height: 14px;
+      background: #10B981;
+      border: 2px solid #0B0F19;
+      border-radius: 50%;
+    }
+    .profile-info {
+      flex: 1;
+      min-width: 0;
+    }
+    .profile-name {
+      font-size: 14px;
+      font-weight: 800;
+      color: #FFFFFF;
+      letter-spacing: -0.2px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .profile-subtitle {
+      font-size: 11px;
+      color: #94A3B8;
+      margin-top: 1px;
+    }
+    .status-pill {
+      display: inline-block;
+      font-size: 9.5px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: rgba(16, 185, 129, 0.2);
+      color: #34D399;
+      border: 1px solid rgba(52, 211, 153, 0.3);
+      margin-top: 3px;
+    }
+
+    /* Main Tab Navigation Bar */
+    .nav-tabs {
+      display: flex;
+      background: #131D31;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      padding: 3px;
+      margin-bottom: 14px;
+      gap: 3px;
+    }
+    .nav-tab-btn {
+      flex: 1;
+      background: transparent;
+      border: none;
+      color: #94A3B8;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 7px 4px;
+      border-radius: 9px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      transition: all 0.2s;
+    }
+    .nav-tab-btn.active {
+      background: #4F46E5;
+      color: #FFFFFF;
+      box-shadow: 0 2px 8px rgba(79, 70, 229, 0.4);
+    }
+
+    /* Master Shield Toggle */
+    .toggle-card {
+      background: #131D31;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 14px;
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .toggle-title {
+      font-size: 12.5px;
+      font-weight: 700;
+      color: #F1F5F9;
+    }
+    .toggle-desc {
+      font-size: 10.5px;
+      color: #64748B;
+      margin-top: 1px;
+    }
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 40px;
+      height: 22px;
+    }
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-color: #334155;
+      transition: .3s;
+      border-radius: 22px;
+    }
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 16px;
+      width: 16px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: .3s;
+      border-radius: 50%;
+    }
+    input:checked + .slider {
+      background-color: #6366F1;
+    }
+    input:checked + .slider:before {
+      transform: translateX(18px);
+    }
+
+    /* Section Headers */
+    .section-title {
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: #818CF8;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Marathon Card */
+    .marathon-card {
+      background: linear-gradient(145deg, #182238 0%, #0F172A 100%);
+      border: 1px solid rgba(99, 102, 241, 0.35);
+      border-radius: 14px;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+    .marathon-card.active-state {
+      border-color: #10B981;
+      box-shadow: 0 0 16px rgba(16, 185, 129, 0.2);
+    }
+    .input-group {
+      margin-bottom: 10px;
+    }
+    .input-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: #94A3B8;
+      margin-bottom: 4px;
+      display: block;
+    }
+    .url-input {
+      width: 100%;
+      background: #0B0F19;
+      border: 1px solid #334155;
+      color: #F8FAFC;
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 12px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .url-input:focus {
+      border-color: #818CF8;
+    }
+
+    /* Interval selector */
+    .presets {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+    .preset-btn {
+      flex: 1;
+      background: #1E293B;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #CBD5E1;
+      padding: 6px 4px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-align: center;
+    }
+    .preset-btn.selected {
+      background: #4F46E5;
+      color: #FFFFFF;
+      border-color: #818CF8;
+    }
+
+    .btn-action {
+      width: 100%;
+      background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
+      color: white;
+      border: none;
+      padding: 9px 12px;
+      border-radius: 9px;
+      font-weight: 700;
+      font-size: 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: transform 0.15s, opacity 0.15s;
+    }
+    .btn-action:hover {
+      opacity: 0.95;
+      transform: translateY(-1px);
+    }
+    .btn-action:active {
+      transform: translateY(0);
+    }
+
+    /* Active Marathon HUD */
+    .marathon-active-hud {
+      display: none;
+    }
+    .hud-timer-box {
+      background: #080D1A;
+      border: 1px solid rgba(16, 185, 129, 0.4);
+      border-radius: 10px;
+      padding: 10px;
+      text-align: center;
+      margin-bottom: 10px;
+    }
+    .hud-status-badge {
+      font-size: 10px;
+      font-weight: 800;
+      color: #34D399;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .hud-timer-digits {
+      font-size: 26px;
+      font-weight: 900;
+      color: #FFFFFF;
+      letter-spacing: 1px;
+      font-variant-numeric: tabular-nums;
+      margin: 2px 0;
+    }
+    .hud-cycle-text {
+      font-size: 11px;
+      color: #94A3B8;
+    }
+    .hud-buttons {
+      display: flex;
+      gap: 6px;
+    }
+    .btn-hud {
+      flex: 1;
+      padding: 7px 8px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      border: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+    }
+    .btn-resume {
+      background: #10B981;
+      color: white;
+    }
+    .btn-open-video {
+      background: #4F46E5;
+      color: white;
+    }
+    .btn-stop {
+      background: rgba(239, 68, 68, 0.2);
+      color: #F87171;
+      border: 1px solid rgba(239, 68, 68, 0.4);
+    }
+
+    /* Rules Checklist */
+    .rules-card {
+      background: #131D31;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 14px;
+      padding: 10px 14px;
+      margin-bottom: 12px;
+    }
+    .rule-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 5px 0;
+      font-size: 11px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    }
+    .rule-item:last-child {
+      border-bottom: none;
+    }
+    .rule-name {
+      color: #CBD5E1;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .rule-badge {
+      font-size: 9.5px;
+      font-weight: 700;
+      color: #34D399;
+      background: rgba(16, 185, 129, 0.15);
+      padding: 1px 6px;
+      border-radius: 4px;
+    }
+
+    /* --- MUSIC TAB STYLES --- */
+    .music-header-box {
+      background: linear-gradient(135deg, #1E1B4B 0%, #172554 100%);
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      border-radius: 14px;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+    .music-subtabs {
+      display: flex;
+      background: #0B0F19;
+      border-radius: 10px;
+      padding: 2px;
+      margin-bottom: 10px;
+      gap: 4px;
+    }
+    .music-subtab-btn {
+      flex: 1;
+      background: transparent;
+      border: none;
+      color: #94A3B8;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 6px 4px;
+      border-radius: 8px;
+      cursor: pointer;
+      text-align: center;
+    }
+    .music-subtab-btn.active {
+      background: #4F46E5;
+      color: #FFFFFF;
+    }
+    .chip-scroll {
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      padding-bottom: 6px;
+      margin-bottom: 10px;
+    }
+    .chip-scroll::-webkit-scrollbar {
+      height: 3px;
+    }
+    .chip-scroll::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 3px;
+    }
+    .music-chip {
+      background: #1E293B;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #94A3B8;
+      padding: 4px 10px;
+      border-radius: 16px;
+      font-size: 10.5px;
+      font-weight: 600;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+    .music-chip.active {
+      background: #4F46E5;
+      color: white;
+      border-color: #818CF8;
+    }
+
+    .track-list-container {
+      max-height: 240px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding-right: 2px;
+      margin-bottom: 12px;
+    }
+    .track-row {
+      background: #131D31;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 10px;
+      padding: 8px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .track-row:hover {
+      background: #182238;
+      border-color: #6366F1;
+    }
+    .track-row.playing {
+      border-color: #10B981;
+      background: rgba(16, 185, 129, 0.1);
+    }
+    .track-row-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      flex: 1;
+    }
+    .track-row-thumb {
+      width: 30px;
+      height: 30px;
+      border-radius: 8px;
+      background: #1E293B;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+    .track-row-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: #F8FAFC;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .track-row-cat {
+      font-size: 10px;
+      color: #64748B;
+    }
+    .track-row-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .btn-fav-small {
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      font-size: 13px;
+      padding: 2px;
+    }
+
+    /* Playlists in popup */
+    .playlist-list-container {
+      max-height: 240px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .playlist-row {
+      background: #131D31;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 10px;
+      padding: 10px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+    }
+
+    /* Sticky Mini Player Bar */
+    .mini-player-bar {
+      background: linear-gradient(135deg, #1E1B4B 0%, #172554 100%);
+      border: 1px solid rgba(99, 102, 241, 0.4);
+      border-radius: 12px;
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 10px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    }
+    .mini-track-info {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      flex: 1;
+    }
+    .mini-play-btn {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: #6366F1;
+      border: none;
+      color: white;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    /* --- CROSS-DEVICE SYNC TAB STYLES --- */
+    .sync-overview-card {
+      background: linear-gradient(135deg, #1E1B4B 0%, #0F172A 100%);
+      border: 1px solid rgba(99, 102, 241, 0.35);
+      border-radius: 14px;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+    .sync-stats-row {
+      display: flex;
+      gap: 6px;
+      margin: 10px 0;
+    }
+    .sync-stat-pill {
+      flex: 1;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 10px;
+      padding: 8px 6px;
+      text-align: center;
+    }
+    .sync-stat-label {
+      font-size: 9.5px;
+      color: #94A3B8;
+      font-weight: 600;
+    }
+    .sync-stat-val {
+      font-size: 15px;
+      font-weight: 900;
+      color: #FFFFFF;
+      margin-top: 2px;
+    }
+
+    /* Footer */
+    .footer {
+      text-align: center;
+      font-size: 10.5px;
+      color: #64748B;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Profile Card -->
+  <div class="profile-card">
+    <div class="avatar-wrapper">
+      <img src="avatar.png" alt="Profile" class="avatar-img" id="profileImg" onerror="this.src='icon128.png'">
+      <div class="avatar-badge"></div>
+    </div>
+    <div class="profile-info">
+      <div class="profile-name">
+        StudyGuard Cadet 🛡️
+      </div>
+      <div class="profile-subtitle">Desktop Study & Music Studio</div>
+      <div id="statusBadge" class="status-pill">⚡ SHIELD ACTIVE</div>
+    </div>
+    <button type="button" id="btnPopOutMusic" style="background: rgba(99, 102, 241, 0.2); border: 1px solid rgba(99, 102, 241, 0.4); color: #818CF8; border-radius: 8px; padding: 6px 8px; font-size: 11px; cursor: pointer; font-weight: 700;" title="Open Fullscreen Music Studio in Tab">
+      🎵 Pop Out ↗️
+    </button>
+  </div>
+
+  <!-- Main Navigation Tabs -->
+  <div class="nav-tabs">
+    <button type="button" class="nav-tab-btn active" id="tabNavShields">
+      <span>🛡️</span> Shields & Marathon
+    </button>
+    <button type="button" class="nav-tab-btn" id="tabNavMusic">
+      <span>🎵</span> Study Music
+    </button>
+    <button type="button" class="nav-tab-btn" id="tabNavSync">
+      <span>🔄</span> Sync Hub
+    </button>
+  </div>
+
+  <!-- ================= TAB 1: SHIELDS & MARATHON ================= -->
+  <div id="viewShieldsTab">
+    <!-- Master Shield Toggle -->
+    <div class="toggle-card">
+      <div>
+        <div class="toggle-title">Laptop Focus Guard</div>
+        <div class="toggle-desc">Blocks distractions across YouTube & social media</div>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="shieldToggle" checked>
+        <span class="slider"></span>
+      </label>
+    </div>
+
+    <!-- YouTube Study Marathon Section -->
+    <div class="section-title">
+      <span>🎓</span> YouTube Study Marathon
+    </div>
+
+    <div class="marathon-card" id="marathonCard">
+      <!-- Setup Form (Shown when inactive) -->
+      <div id="marathonSetupView">
+        <div class="input-group">
+          <label class="input-label" for="ytVideoUrl">Lecture / Tutorial YouTube Link:</label>
+          <input type="text" id="ytVideoUrl" class="url-input" placeholder="https://www.youtube.com/watch?v=..." autocomplete="off">
+        </div>
+
+        <div class="input-label">Focus & Break Interval:</div>
+        <div class="presets">
+          <button type="button" class="preset-btn selected" data-study="45" data-break="15">45m / 15m</button>
+          <button type="button" class="preset-btn" data-study="25" data-break="5">25m / 5m</button>
+          <button type="button" class="preset-btn" data-study="50" data-break="10">50m / 10m</button>
+        </div>
+
+        <button type="button" id="btnStartMarathon" class="btn-action">
+          <span>🚀</span> Start Locked Study Marathon
+        </button>
+        <small style="color: #64748B; font-size: 10px; display: block; margin-top: 6px; text-align: center;">
+          Locks browser to lecture video & logs study time to sync stats!
+        </small>
+      </div>
+
+      <!-- Active Marathon HUD (Shown when active) -->
+      <div id="marathonActiveView" class="marathon-active-hud">
+        <div class="hud-timer-box">
+          <div id="hudIntervalType" class="hud-status-badge">📚 FOCUS TIME</div>
+          <div id="hudTimerDigits" class="hud-timer-digits">45:00</div>
+          <div id="hudCycleText" class="hud-cycle-text">Cycle 1 • YouTube Locked</div>
+        </div>
+        <div class="hud-buttons">
+          <button type="button" id="btnOpenVideo" class="btn-hud btn-open-video">
+            <span>📺</span> Lecture
+          </button>
+          <button type="button" id="btnPauseResume" class="btn-hud btn-resume">
+            <span>⏸️</span> Pause
+          </button>
+          <button type="button" id="btnStopMarathon" class="btn-hud btn-stop">
+            <span>⏹️</span> Unlock
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- YouTube Distraction Shields Checklist -->
+    <div class="section-title">
+      <span>🛡️</span> YouTube Shields Enabled
+    </div>
+
+    <div class="rules-card">
+      <div class="rule-item">
+        <div class="rule-name"><span>🚫</span> Subscriptions Tab & List</div>
+        <span class="rule-badge">BLOCKED</span>
+      </div>
+      <div class="rule-item">
+        <div class="rule-name"><span>🚫</span> Home Recommendations Feed</div>
+        <span class="rule-badge">BLOCKED</span>
+      </div>
+      <div class="rule-item">
+        <div class="rule-name"><span>🚫</span> Sidebar & Next Videos</div>
+        <span class="rule-badge">BLOCKED</span>
+      </div>
+      <div class="rule-item">
+        <div class="rule-name"><span>🚫</span> Comments & End-Screen Cards</div>
+        <span class="rule-badge">BLOCKED</span>
+      </div>
+      <div class="rule-item">
+        <div class="rule-name"><span>🚫</span> YouTube Shorts</div>
+        <span class="rule-badge">BLOCKED</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= TAB 2: STUDY MUSIC ================= -->
+  <div id="viewMusicTab" style="display: none;">
+    <!-- Top Music Actions Card -->
+    <div class="music-header-box">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <span style="font-size: 13px; font-weight: 800; color: white;">Offline Study Audio</span>
+        <button type="button" id="btnTriggerPopOut" style="background: none; border: none; color: #818CF8; font-size: 11px; cursor: pointer; font-weight: bold;">
+          Full Studio ↗️
+        </button>
+      </div>
+      <div style="display: flex; gap: 8px;">
+        <input type="file" id="popupFilePicker" accept="audio/*" style="display: none;">
+        <button type="button" id="btnPopupAddMusic" class="btn-action" style="padding: 7px 10px; font-size: 11px; flex: 1;">
+          <span>📂</span> Add Audio File
+        </button>
+        <button type="button" id="btnPopupNewPlaylist" class="btn-action" style="padding: 7px 10px; font-size: 11px; flex: 1; background: #1E293B; border: 1px solid rgba(255,255,255,0.15);">
+          <span>📑</span> New Playlist
+        </button>
+      </div>
+    </div>
+
+    <!-- Sub-tabs: Tracks vs Playlists -->
+    <div class="music-subtabs">
+      <button type="button" id="subtabTracks" class="music-subtab-btn active">
+        Tracks (<span id="popupTracksCount">0</span>)
+      </button>
+      <button type="button" id="subtabPlaylists" class="music-subtab-btn">
+        Playlists (<span id="popupPlaylistsCount">0</span>)
+      </button>
+    </div>
+
+    <!-- Category Chips -->
+    <div id="popupCategoryChips" class="chip-scroll">
+      <button type="button" class="music-chip active" data-cat="All">All</button>
+      <button type="button" class="music-chip" data-cat="Binaural Beats">Binaural</button>
+      <button type="button" class="music-chip" data-cat="Ambient Sounds">Ambient</button>
+      <button type="button" class="music-chip" data-cat="Lo-Fi Study">Lo-Fi</button>
+      <button type="button" class="music-chip" data-cat="Classical Focus">Classical</button>
+      <button type="button" class="music-chip" data-cat="My Saved Tracks">Uploads</button>
+    </div>
+
+    <!-- Tracks List Container -->
+    <div id="popupTracksList" class="track-list-container">
+      <!-- Injected via popup.js -->
+    </div>
+
+    <!-- Playlists Container -->
+    <div id="popupPlaylistsList" class="playlist-list-container" style="display: none;">
+      <!-- Injected via popup.js -->
+    </div>
+
+    <!-- Volume & Loop Slider -->
+    <div style="display: flex; align-items: center; justify-content: space-between; background: #131D31; padding: 6px 12px; border-radius: 8px; margin-bottom: 6px;">
+      <div style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: #94A3B8;">
+        <span>🔊 Vol</span>
+        <input type="range" id="popupVolumeSlider" min="0" max="1" step="0.05" value="0.8" style="width: 80px; height: 4px; accent-color: #818CF8; cursor: pointer;">
+      </div>
+      <button type="button" id="btnPopupLoop" style="background: none; border: none; color: #818CF8; font-size: 11px; font-weight: bold; cursor: pointer;">
+        🔁 Loop: ON
+      </button>
+    </div>
+  </div>
+
+  <!-- ================= TAB 3: CROSS-DEVICE SYNC HUB ================= -->
+  <div id="viewSyncTab" style="display: none;">
+    <div class="sync-overview-card">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-size: 13px; font-weight: 800; color: white;">Cross-Device Focus Stats</span>
+        <span id="syncStatusBadge" style="font-size: 10px; color: #34D399; font-weight: 700;">🟢 Online</span>
+      </div>
+
+      <!-- 3 Pillars: Phone + Laptop = Combined -->
+      <div class="sync-stats-row">
+        <div class="sync-stat-pill">
+          <div class="sync-stat-label">📱 Phone</div>
+          <div class="sync-stat-val" id="syncPhoneMins">75m</div>
+        </div>
+        <div class="sync-stat-pill" style="border-color: #818CF8;">
+          <div class="sync-stat-label">💻 Laptop</div>
+          <div class="sync-stat-val" id="syncLaptopMins" style="color: #818CF8;">45m</div>
+        </div>
+        <div class="sync-stat-pill" style="border-color: #F59E0B; background: rgba(245, 158, 11, 0.1);">
+          <div class="sync-stat-label" style="color: #F59E0B;">🌟 Combined</div>
+          <div class="sync-stat-val" id="syncCombinedMins" style="color: #F59E0B;">120m</div>
+        </div>
+      </div>
+
+      <div style="font-size: 11px; color: #94A3B8; text-align: center;" id="syncLastSyncText">
+        Last Synced: Just now
+      </div>
+    </div>
+
+    <!-- Quick Add Laptop Study Time -->
+    <div class="section-title">
+      <span>⚡</span> Quick Add Laptop Study Time
+    </div>
+    <div style="display: flex; gap: 6px; margin-bottom: 12px;">
+      <button type="button" class="btn-action btn-add-time" data-mins="15" style="flex: 1; padding: 6px 0; font-size: 11px;">+15m</button>
+      <button type="button" class="btn-action btn-add-time" data-mins="30" style="flex: 1; padding: 6px 0; font-size: 11px;">+30m</button>
+      <button type="button" class="btn-action btn-add-time" data-mins="45" style="flex: 1; padding: 6px 0; font-size: 11px;">+45m</button>
+      <button type="button" class="btn-action btn-add-time" data-mins="60" style="flex: 1; padding: 6px 0; font-size: 11px; background: #F59E0B; color: black;">+60m</button>
+    </div>
+
+    <!-- Pairing Code & 1-Click Sync -->
+    <div class="section-title">
+      <span>🔗</span> Pair with StudyGuard Phone
+    </div>
+    <div class="rules-card" style="margin-bottom: 8px;">
+      <div style="font-size: 11px; color: #94A3B8; margin-bottom: 6px;">
+        Enter Pairing Code from Phone App (Sync Tab):
+      </div>
+      <div style="display: flex; gap: 6px; margin-bottom: 10px;">
+        <input type="text" id="inputSyncPairingCode" class="url-input" placeholder="e.g. SG-123456" style="text-transform: uppercase;">
+        <button type="button" id="btnPairDevice" class="btn-action" style="width: 80px; padding: 6px 10px;">
+          Pair
+        </button>
+      </div>
+
+      <!-- JSON Data Transfer -->
+      <div style="display: flex; gap: 6px;">
+        <button type="button" id="btnCopyLaptopJson" class="btn-hud btn-open-video" style="font-size: 10.5px;">
+          📋 Copy Laptop Stats
+        </button>
+        <button type="button" id="btnImportPhoneJson" class="btn-hud btn-resume" style="font-size: 10.5px;">
+          📥 Paste Phone JSON
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sticky Bottom Mini-Player Bar (Visible when track is loaded) -->
+  <div id="miniPlayerBar" class="mini-player-bar">
+    <div class="mini-track-info">
+      <div style="font-size: 16px;" id="miniTrackEmoji">🧘</div>
+      <div style="min-width: 0;">
+        <div style="font-size: 11px; font-weight: 800; color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" id="miniTrackTitle">
+          Binaural Alpha Waves (432Hz)
+        </div>
+        <div style="font-size: 9.5px; color: #34D399;" id="miniTrackTime">
+          00:00 / 60:00
+        </div>
+      </div>
+    </div>
+    <div style="display: flex; align-items: center; gap: 6px;">
+      <button type="button" id="btnMiniPlayPause" class="mini-play-btn">▶️</button>
+      <button type="button" id="btnMiniStop" style="background: none; border: none; color: #F87171; font-size: 14px; cursor: pointer; padding: 4px;">⏹️</button>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span>📱</span> Connected with StudyGuard Android App
+  </div>
+
+  <script src="music-engine.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>StudyGuard Music & Focus Studio</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    }
+    body {
+      background: #0B0F19;
+      color: #F8FAFC;
+      padding: 24px;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .container {
+      width: 100%;
+      max-width: 860px;
+    }
+    .header-card {
+      background: linear-gradient(135deg, #1E1B4B 0%, #172554 100%);
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      border-radius: 20px;
+      padding: 20px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+    }
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .logo-badge {
+      width: 54px;
+      height: 54px;
+      border-radius: 50%;
+      background: rgba(99, 102, 241, 0.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 26px;
+      border: 2px solid #818CF8;
+    }
+    .title {
+      font-size: 20px;
+      font-weight: 800;
+      color: #FFFFFF;
+    }
+    .subtitle {
+      font-size: 13px;
+      color: #94A3B8;
+      margin-top: 3px;
+    }
+    .header-actions {
+      display: flex;
+      gap: 10px;
+    }
+    .btn-primary {
+      background: #6366F1;
+      color: white;
+      border: none;
+      padding: 9px 16px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: background 0.2s, transform 0.15s;
+    }
+    .btn-primary:hover {
+      background: #4F46E5;
+      transform: translateY(-1px);
+    }
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.08);
+      color: #CBD5E1;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      padding: 9px 16px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    /* Player Console */
+    .player-console {
+      background: linear-gradient(145deg, #182238 0%, #0F172A 100%);
+      border: 1px solid rgba(99, 102, 241, 0.35);
+      border-radius: 18px;
+      padding: 20px 24px;
+      margin-bottom: 24px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    }
+    .player-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    .track-info-large {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .track-icon-box {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      background: #4F46E5;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+    }
+    .track-title-large {
+      font-size: 16px;
+      font-weight: 800;
+      color: #FFFFFF;
+    }
+    .track-cat-badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: rgba(16, 185, 129, 0.2);
+      color: #34D399;
+      margin-top: 4px;
+    }
+    .controls-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      margin-bottom: 14px;
+    }
+    .play-btn-circle {
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      background: #6366F1;
+      border: none;
+      color: white;
+      font-size: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: 0 4px 14px rgba(99, 102, 241, 0.5);
+      transition: transform 0.15s;
+    }
+    .play-btn-circle:hover {
+      transform: scale(1.05);
+    }
+    .ctrl-btn {
+      background: transparent;
+      border: none;
+      color: #94A3B8;
+      font-size: 18px;
+      cursor: pointer;
+      padding: 8px;
+      border-radius: 8px;
+      transition: color 0.2s;
+    }
+    .ctrl-btn:hover {
+      color: #F8FAFC;
+    }
+    .ctrl-btn.active {
+      color: #818CF8;
+    }
+
+    /* Progress & Volume */
+    .seek-container {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .time-text {
+      font-size: 12px;
+      color: #94A3B8;
+      font-variant-numeric: tabular-nums;
+      width: 44px;
+    }
+    .time-text.right {
+      text-align: right;
+    }
+    .slider-bar {
+      flex: 1;
+      -webkit-appearance: none;
+      height: 5px;
+      border-radius: 5px;
+      background: #334155;
+      outline: none;
+      cursor: pointer;
+    }
+    .slider-bar::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #818CF8;
+      cursor: pointer;
+    }
+    .volume-box {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 130px;
+    }
+
+    /* Tabs */
+    .tabs-header {
+      display: flex;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      margin-bottom: 16px;
+      gap: 10px;
+    }
+    .tab-btn {
+      background: transparent;
+      border: none;
+      color: #94A3B8;
+      font-size: 14px;
+      font-weight: 700;
+      padding: 10px 16px;
+      cursor: pointer;
+      position: relative;
+      transition: color 0.2s;
+    }
+    .tab-btn.active {
+      color: #818CF8;
+    }
+    .tab-btn.active::after {
+      content: '';
+      position: absolute;
+      bottom: -1px;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: #818CF8;
+      border-radius: 3px 3px 0 0;
+    }
+
+    /* Category Filter Chips */
+    .filter-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .chip {
+      background: #1E293B;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #94A3B8;
+      padding: 5px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .chip.active {
+      background: #4F46E5;
+      color: white;
+      border-color: #818CF8;
+    }
+
+    /* Track List */
+    .track-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .track-card {
+      background: #131D31;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 14px;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      transition: border-color 0.2s, background 0.2s;
+      cursor: pointer;
+    }
+    .track-card:hover {
+      border-color: #6366F1;
+      background: #182238;
+    }
+    .track-card.playing {
+      border-color: #10B981;
+      background: rgba(16, 185, 129, 0.1);
+    }
+    .track-meta {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .track-thumb {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      background: #1E293B;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+    }
+    .track-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: #F8FAFC;
+    }
+    .track-sub {
+      font-size: 11px;
+      color: #64748B;
+      margin-top: 2px;
+    }
+    .track-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .icon-btn {
+      background: transparent;
+      border: none;
+      color: #64748B;
+      font-size: 16px;
+      cursor: pointer;
+      padding: 6px;
+      border-radius: 6px;
+      transition: color 0.2s;
+    }
+    .icon-btn:hover {
+      color: #F8FAFC;
+    }
+    .icon-btn.fav {
+      color: #F43F5E;
+    }
+
+    /* Playlists Grid */
+    .playlist-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: 14px;
+    }
+    .playlist-card {
+      background: #131D31;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      height: 150px;
+      cursor: pointer;
+      position: relative;
+      transition: transform 0.15s, border-color 0.2s;
+    }
+    .playlist-card:hover {
+      transform: translateY(-2px);
+      border-color: #818CF8;
+    }
+    .playlist-badge {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      color: white;
+      margin-bottom: 8px;
+    }
+    .playlist-name {
+      font-size: 15px;
+      font-weight: 800;
+      color: #FFFFFF;
+    }
+    .playlist-desc {
+      font-size: 11px;
+      color: #94A3B8;
+      margin-top: 4px;
+      flex: 1;
+    }
+    .playlist-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11px;
+      color: #64748B;
+      font-weight: 600;
+    }
+
+    /* Modal Dialog */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(4px);
+      align-items: center;
+      justify-content: center;
+      z-index: 999;
+    }
+    .modal-box {
+      background: #131D31;
+      border: 1px solid rgba(99, 102, 241, 0.4);
+      border-radius: 18px;
+      padding: 24px;
+      width: 420px;
+      max-width: 90vw;
+    }
+    .modal-title {
+      font-size: 16px;
+      font-weight: 800;
+      color: #FFFFFF;
+      margin-bottom: 14px;
+    }
+    .input-field {
+      width: 100%;
+      background: #0B0F19;
+      border: 1px solid #334155;
+      color: #F8FAFC;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 13px;
+      outline: none;
+      margin-bottom: 12px;
+    }
+    .input-field:focus {
+      border-color: #818CF8;
+    }
+    .modal-btns {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <!-- Header -->
+  <div class="header-card">
+    <div class="header-left">
+      <div class="logo-badge">🎵</div>
+      <div>
+        <div class="title">StudyGuard Focus Audio Studio</div>
+        <div class="subtitle">Offline procedural binaural beats, ambient generators & custom study tracks</div>
+      </div>
+    </div>
+    <div class="header-actions">
+      <input type="file" id="filePicker" accept="audio/*" style="display: none;">
+      <button type="button" id="btnAddMusic" class="btn-primary">
+        <span>📂</span> Add Music
+      </button>
+      <button type="button" id="btnCreatePlaylist" class="btn-secondary">
+        <span>📑</span> New Playlist
+      </button>
+    </div>
+  </div>
+
+  <!-- Main Active Player Bar -->
+  <div class="player-console">
+    <div class="player-top">
+      <div class="track-info-large">
+        <div class="track-icon-box" id="playerThumb">🎧</div>
+        <div>
+          <div class="track-title-large" id="playerTrackTitle">Binaural Alpha Waves (432Hz)</div>
+          <div class="track-cat-badge" id="playerTrackCat">Binaural Beats</div>
+        </div>
+      </div>
+      <div class="volume-box">
+        <span style="font-size: 14px;">🔊</span>
+        <input type="range" id="volumeSlider" min="0" max="1" step="0.05" value="0.8" class="slider-bar">
+      </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="controls-row">
+      <button type="button" id="btnPrev" class="ctrl-btn" title="Previous">⏮️</button>
+      <button type="button" id="btnPlayPause" class="play-btn-circle">▶️</button>
+      <button type="button" id="btnStop" class="ctrl-btn" title="Stop">⏹️</button>
+      <button type="button" id="btnNext" class="ctrl-btn" title="Next">⏭️</button>
+      <button type="button" id="btnLoop" class="ctrl-btn active" title="Toggle Loop">🔁</button>
+    </div>
+
+    <!-- Seekbar -->
+    <div class="seek-container">
+      <span class="time-text" id="currentTimeText">00:00</span>
+      <input type="range" id="seekSlider" min="0" max="3600" value="0" class="slider-bar">
+      <span class="time-text right" id="durationText">60:00</span>
+    </div>
+  </div>
+
+  <!-- Tabs Navigation -->
+  <div class="tabs-header">
+    <button type="button" id="tabTracks" class="tab-btn active">Tracks Library (<span id="tracksCount">0</span>)</button>
+    <button type="button" id="tabPlaylists" class="tab-btn">Playlists (<span id="playlistsCount">0</span>)</button>
+  </div>
+
+  <!-- Category Filter Chips (For Tracks view) -->
+  <div id="categoryChips" class="filter-chips">
+    <button type="button" class="chip active" data-cat="All">All Tracks</button>
+    <button type="button" class="chip" data-cat="Binaural Beats">Binaural Beats</button>
+    <button type="button" class="chip" data-cat="Ambient Sounds">Ambient Sounds</button>
+    <button type="button" class="chip" data-cat="Lo-Fi Study">Lo-Fi Study</button>
+    <button type="button" class="chip" data-cat="Classical Focus">Classical Focus</button>
+    <button type="button" class="chip" data-cat="My Saved Tracks">My Uploads</button>
+  </div>
+
+  <!-- Tracks Section -->
+  <div id="tracksView" class="track-grid">
+    <!-- Populated dynamically via music.js -->
+  </div>
+
+  <!-- Playlists Section -->
+  <div id="playlistsView" class="playlist-grid" style="display: none;">
+    <!-- Populated dynamically via music.js -->
+  </div>
+</div>
+
+<!-- Modal Dialog: Create Playlist -->
+<div id="modalCreatePlaylist" class="modal-overlay">
+  <div class="modal-box">
+    <div class="modal-title">Create Study Playlist</div>
+    <input type="text" id="inputPlaylistName" class="input-field" placeholder="Playlist Name (e.g. Exam Rush)">
+    <input type="text" id="inputPlaylistDesc" class="input-field" placeholder="Description (optional)">
+    <div class="modal-btns">
+      <button type="button" id="btnCancelModal" class="btn-secondary">Cancel</button>
+      <button type="button" id="btnSavePlaylist" class="btn-primary">Create</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Dialog: Add Track to Playlist -->
+<div id="modalAddToPlaylist" class="modal-overlay" style="display: none;">
+  <div class="modal-box">
+    <div class="modal-title">Add Track to Playlist</div>
+    <div id="addToPlaylistTrackTitle" style="color: #818CF8; font-weight: 700; font-size: 13.5px; margin-bottom: 12px;"></div>
+    <div style="font-size: 11.5px; color: #94A3B8; margin-bottom: 8px;">Select which playlist to add this song to:</div>
+    <div id="addToPlaylistOptions" style="max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px;"></div>
+    <div class="modal-btns">
+      <button type="button" id="btnCancelAddToPlaylist" class="btn-secondary">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script src="music-engine.js"></script>
+<script src="music.js"></script>
+</body>
+</html>

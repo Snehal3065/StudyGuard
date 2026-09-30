@@ -1,0 +1,6 @@
+{
+  "name": "StudyGuard",
+  "description": "Lock away distraction apps, block YouTube Shorts while preserving study videos, and enforce strict study sessions.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

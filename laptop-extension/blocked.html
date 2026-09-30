@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>StudyGuard - Restricted Page</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    }
+    body {
+      background: linear-gradient(135deg, #0A0F1D 0%, #161D36 50%, #2A1138 100%);
+      color: #F8FAFC;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .card {
+      background: rgba(26, 34, 56, 0.9);
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      backdrop-filter: blur(20px);
+      border-radius: 28px;
+      padding: 44px 36px;
+      max-width: 520px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 30px 60px -15px rgba(0, 0, 0, 0.7);
+    }
+    .avatar-wrapper {
+      position: relative;
+      width: 84px;
+      height: 84px;
+      margin: 0 auto 20px;
+    }
+    .avatar-img {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 3px solid #818CF8;
+      box-shadow: 0 0 20px rgba(129, 140, 248, 0.5);
+    }
+    .shield-badge-icon {
+      position: absolute;
+      bottom: -4px;
+      right: -4px;
+      background: #4F46E5;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 15px;
+      border: 2px solid #0A0F1D;
+    }
+    h1 {
+      font-size: 26px;
+      font-weight: 800;
+      margin-bottom: 10px;
+      color: #FFFFFF;
+    }
+    .blocked-target {
+      display: inline-block;
+      background: rgba(239, 68, 68, 0.15);
+      color: #F87171;
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      padding: 5px 16px;
+      border-radius: 999px;
+      font-weight: 700;
+      font-size: 13px;
+      margin-bottom: 20px;
+    }
+    .subtitle {
+      font-size: 15px;
+      color: #94A3B8;
+      line-height: 1.6;
+      margin-bottom: 24px;
+    }
+    .quote-box {
+      background: rgba(11, 15, 25, 0.6);
+      border-left: 4px solid #10B981;
+      padding: 16px 20px;
+      border-radius: 10px;
+      text-align: left;
+      margin-bottom: 28px;
+      font-style: italic;
+      color: #CBD5E1;
+      font-size: 13.5px;
+      line-height: 1.5;
+    }
+    .actions {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .btn {
+      padding: 12px 24px;
+      border-radius: 12px;
+      font-weight: 700;
+      font-size: 14px;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.2s ease;
+      border: none;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #10B981, #059669);
+      color: white;
+      box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+    }
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+    }
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.08);
+      color: #E2E8F0;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+    }
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.15);
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="avatar-wrapper">
+      <img src="avatar.png" alt="Avatar" class="avatar-img" onerror="this.src='icon128.png'">
+      <div class="shield-badge-icon">🛡️</div>
+    </div>
+    
+    <div id="targetBadge" class="blocked-target">Distraction Blocked</div>
+    <h1>StudyGuard Active Focus</h1>
+    <p class="subtitle" id="subMessage">
+      This feed is locked during your study session to protect your concentration and deep work.
+    </p>
+
+    <div class="quote-box">
+      <p id="quoteText">"The difference between who you are and who you want to be is what you do."</p>
+    </div>
+
+    <div class="actions">
+      <button class="btn btn-primary" id="btnBack">Go Back to Studies 📚</button>
+      <a class="btn btn-secondary" href="https://www.youtube.com/" id="btnHome">YouTube Home 🏠</a>
+    </div>
+  </div>
+
+  <script src="blocked.js"></script>
+</body>
+</html>

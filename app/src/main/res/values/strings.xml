@@ -1,0 +1,6 @@
+<resources>
+    <string name="app_name">StudyGuard</string>
+    <string name="accessibility_service_label">StudyGuard Focus &amp; Shorts Protection</string>
+    <string name="accessibility_service_description">Monitors active apps to block distraction apps during study hours and blocks YouTube Shorts while allowing normal study videos.</string>
+    <string name="device_admin_description">Protects StudyGuard from being uninstalled during active study hours so you stay focused.</string>
+</resources>

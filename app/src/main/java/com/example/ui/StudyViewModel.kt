@@ -1,0 +1,840 @@
+package com.example.ui
+
+import android.app.admin.DevicePolicyManager
+import android.content.ComponentName
+import android.content.Context
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
+import com.example.StudyGuardApp
+import com.example.data.model.AchievementEntity
+import com.example.data.model.BlockedAppEntity
+import com.example.data.model.DistractionEvent
+import com.example.data.model.PlaylistEntity
+import com.example.data.model.StudyMusicTrack
+import com.example.data.model.StudySession
+import com.example.data.repository.StudyRepository
+import com.example.receiver.StudyDeviceAdminReceiver
+import com.example.service.FloatingFocusWidgetService
+import com.example.service.StudyFocusService
+import com.example.util.AppUsageInfo
+import com.example.util.AudioPlayerState
+import com.example.util.InstalledAppsHelper
+import com.example.util.MarathonConfig
+import com.example.util.MarathonPhase
+import com.example.util.MarathonState
+import com.example.util.SmartReminderItem
+import com.example.util.StudyAudioPlayer
+import com.example.util.StudyPreferences
+import com.example.util.StudyReminderManager
+import com.example.util.StudySyncManager
+import com.example.util.UsageStatsManagerHelper
+import com.example.util.ChatMessage
+import com.example.util.CoachRole
+import com.example.util.MessageSender
+import com.example.util.GeminiStudyCoach
+import com.example.util.AiCoachResult
+import com.example.widget.StudyGuardAppWidget
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+data class StudyUiState(
+    val isStudyActive: Boolean = false,
+    val remainingSeconds: Long = 0L,
+    val currentSubject: String = "Focused Study",
+    val plannedMinutes: Int = 25,
+    val isAccessibilityEnabled: Boolean = false,
+    val isDeviceAdminEnabled: Boolean = false,
+    val isUsageStatsEnabled: Boolean = false,
+    val isOverlayEnabled: Boolean = false,
+    val isFloatingWidgetActive: Boolean = false,
+    val isYouTubeShortsBlocked: Boolean = true,
+    val isStrictUninstallLockEnabled: Boolean = true,
+    val searchQuery: String = "",
+    val selectedCategoryFilter: String = "All",
+    val todayScreenTimeMs: Long = 0L,
+    val todayDistractionTimeMs: Long = 0L,
+    val usageStatsList: List<AppUsageInfo> = emptyList()
+)
+
+class StudyViewModel(
+    private val repository: StudyRepository,
+    private val context: Context
+) : ViewModel() {
+
+    private val _uiState = MutableStateFlow(
+        StudyUiState(
+            isStudyActive = StudyPreferences.isStudyActive(context),
+            isYouTubeShortsBlocked = StudyPreferences.isBlockYouTubeShortsEnabled(context),
+            isStrictUninstallLockEnabled = StudyPreferences.isStrictUninstallLockEnabled(context)
+        )
+    )
+    val uiState: StateFlow<StudyUiState> = _uiState.asStateFlow()
+
+    val allApps: StateFlow<List<BlockedAppEntity>> = repository.allApps
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val allSessions: StateFlow<List<StudySession>> = repository.allSessions
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val totalDistractionsCount: StateFlow<Int> = repository.totalDistractionsCount
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    val shortsBlockedCount: StateFlow<Int> = repository.shortsBlockedCount
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    val recentDistractions: StateFlow<List<DistractionEvent>> = repository.recentDistractions
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val allMusicTracks: StateFlow<List<StudyMusicTrack>> = repository.allMusicTracks
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val allAchievements: StateFlow<List<AchievementEntity>> = repository.allAchievements
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val allPlaylists: StateFlow<List<PlaylistEntity>> = repository.allPlaylists
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val syncManager = StudySyncManager(context)
+    val syncPairingCode: String = syncManager.getSyncPairingCode()
+    private val _lastSyncFormatted = MutableStateFlow(syncManager.getLastSyncFormatted())
+    val lastSyncFormatted: StateFlow<String> = _lastSyncFormatted.asStateFlow()
+    private val _laptopStats = MutableStateFlow(syncManager.getLaptopStats())
+    val laptopStats: StateFlow<com.example.util.LaptopStats> = _laptopStats.asStateFlow()
+
+    // Smart Reminders
+    val reminderManager = StudyReminderManager(context)
+    private val _remindersList = MutableStateFlow(reminderManager.getReminders())
+    val remindersList: StateFlow<List<SmartReminderItem>> = _remindersList.asStateFlow()
+
+    // Auto-Lock Schedule Manager (Study-to-Unlock Gate)
+    val autoLockManager = com.example.util.ScheduledAutoLockManager(context)
+    private val _autoLockRules = MutableStateFlow(autoLockManager.getRules())
+    val autoLockRules: StateFlow<List<com.example.util.AutoLockScheduleRule>> = _autoLockRules.asStateFlow()
+    private val _activeAutoLockStatus = MutableStateFlow<com.example.util.ActiveAutoLockStatus?>(null)
+    val activeAutoLockStatus: StateFlow<com.example.util.ActiveAutoLockStatus?> = _activeAutoLockStatus.asStateFlow()
+
+    // Dark/Light Theme Mode
+    private val _themeMode = MutableStateFlow(StudyPreferences.getThemeMode(context))
+    val themeMode: StateFlow<StudyPreferences.ThemeMode> = _themeMode.asStateFlow()
+
+    // AI Study Coach & Multi-turn Chat State
+    private val _aiCoachResponse = MutableStateFlow<String?>(null)
+    val aiCoachResponse: StateFlow<String?> = _aiCoachResponse.asStateFlow()
+    private val _isAiLoading = MutableStateFlow(false)
+    val isAiLoading: StateFlow<Boolean> = _isAiLoading.asStateFlow()
+    private val _isLiveGemini = MutableStateFlow(false)
+    val isLiveGemini: StateFlow<Boolean> = _isLiveGemini.asStateFlow()
+
+    private val _chatMessages = MutableStateFlow<List<ChatMessage>>(
+        listOf(
+            ChatMessage(
+                sender = MessageSender.AI,
+                text = "👋 Hello! I'm your StudyGuard AI Coach. Ask me to generate a personalized study timetable, provide emergency anti-procrastination tactics, or quiz you on any subject!",
+                isLiveApi = true
+            )
+        )
+    )
+    val chatMessages: StateFlow<List<ChatMessage>> = _chatMessages.asStateFlow()
+
+    private val _selectedCoachRole = MutableStateFlow(CoachRole.GENERAL)
+    val selectedCoachRole: StateFlow<CoachRole> = _selectedCoachRole.asStateFlow()
+
+    // Long Study Hours Marathon Engine
+    private val _marathonState = MutableStateFlow(MarathonState())
+    val marathonState: StateFlow<MarathonState> = _marathonState.asStateFlow()
+    private var marathonJob: Job? = null
+
+    val playerState: StateFlow<AudioPlayerState> = StudyAudioPlayer.playerState
+
+    init {
+        viewModelScope.launch {
+            repository.syncInstalledAppsIfNeeded()
+        }
+        if (StudyPreferences.hasActiveSessionExpired(context)) {
+            completeCurrentSession()
+        }
+        startLocalTimerLoop()
+        checkPermissions(context)
+        refreshUsageStats()
+        refreshAutoLockStatus()
+    }
+
+    fun setThemeMode(mode: StudyPreferences.ThemeMode) {
+        StudyPreferences.setThemeMode(context, mode)
+        _themeMode.value = mode
+    }
+
+    fun toggleThemeMode() {
+        val next = when (_themeMode.value) {
+            StudyPreferences.ThemeMode.SYSTEM -> StudyPreferences.ThemeMode.LIGHT
+            StudyPreferences.ThemeMode.LIGHT -> StudyPreferences.ThemeMode.DARK
+            StudyPreferences.ThemeMode.DARK -> StudyPreferences.ThemeMode.SYSTEM
+        }
+        setThemeMode(next)
+    }
+
+    fun getTodayStudyMinutes(): Int {
+        val now = System.currentTimeMillis()
+        val cal = java.util.Calendar.getInstance().apply {
+            set(java.util.Calendar.HOUR_OF_DAY, 0)
+            set(java.util.Calendar.MINUTE, 0)
+            set(java.util.Calendar.SECOND, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }
+        val startOfDay = cal.timeInMillis
+
+        val completedToday = allSessions.value
+            .filter { it.startTime >= startOfDay }
+            .sumOf { it.actualMinutes }
+
+        val activeElapsed = if (uiState.value.isStudyActive) {
+            val startTime = StudyPreferences.getSessionStartTime(context)
+            if (startTime > 0L) {
+                ((now - startTime) / (60 * 1000L)).toInt().coerceAtLeast(0)
+            } else 0
+        } else 0
+
+        return completedToday + activeElapsed
+    }
+
+    fun refreshAutoLockStatus() {
+        val todayMins = getTodayStudyMinutes()
+        _activeAutoLockStatus.value = autoLockManager.getActiveRule(todayMins)
+    }
+
+    private fun startLocalTimerLoop() {
+        viewModelScope.launch {
+            while (true) {
+                val active = StudyPreferences.isStudyActive(context)
+                if (active) {
+                    val endTime = StudyPreferences.getSessionEndTime(context)
+                    val now = System.currentTimeMillis()
+                    val left = ((endTime - now) / 1000L).coerceAtLeast(0L)
+                    val subject = StudyPreferences.getSessionSubject(context)
+
+                    if (endTime > 0L && left <= 0L) {
+                        completeCurrentSession()
+                    } else {
+                        _uiState.value = _uiState.value.copy(
+                            isStudyActive = true,
+                            remainingSeconds = left,
+                            currentSubject = subject
+                        )
+                    }
+                } else {
+                    _uiState.value = _uiState.value.copy(
+                        isStudyActive = false,
+                        remainingSeconds = 0L
+                    )
+                }
+
+                delay(1000L)
+            }
+        }
+    }
+
+    fun completeCurrentSession() {
+        viewModelScope.launch {
+            val sessionId = StudyPreferences.getCurrentSessionId(context)
+            val startTime = StudyPreferences.getSessionStartTime(context)
+            val plannedMinutes = StudyPreferences.getPlannedMinutes(context)
+            val elapsedMinutes = (((System.currentTimeMillis() - startTime) / 60000L).toInt())
+            val actualMinutes = elapsedMinutes.coerceAtLeast(plannedMinutes).coerceAtLeast(1)
+
+            repository.completeSession(sessionId, actualMinutes, distractionsIntercepted = 0)
+            StudyPreferences.stopStudySession(context)
+            StudyFocusService.stop(context)
+            _uiState.value = _uiState.value.copy(
+                isStudyActive = false,
+                remainingSeconds = 0L
+            )
+            StudyGuardAppWidget.updateAllWidgets(context)
+        }
+    }
+
+    fun checkPermissions(ctx: Context) {
+        val dpm = ctx.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+        val adminComponent = ComponentName(ctx, StudyDeviceAdminReceiver::class.java)
+        val isAdminActive = dpm.isAdminActive(adminComponent)
+
+        val accessibilityEnabled = isAccessibilityServiceEnabled(ctx)
+        val usageStatsGranted = UsageStatsManagerHelper.hasUsageStatsPermission(ctx)
+        val overlayGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            Settings.canDrawOverlays(ctx)
+        } else true
+
+        _uiState.value = _uiState.value.copy(
+            isDeviceAdminEnabled = isAdminActive,
+            isAccessibilityEnabled = accessibilityEnabled,
+            isUsageStatsEnabled = usageStatsGranted,
+            isOverlayEnabled = overlayGranted
+        )
+
+        refreshUsageStats()
+    }
+
+    fun refreshUsageStats() {
+        viewModelScope.launch {
+            val usageList = withContext(Dispatchers.IO) {
+                UsageStatsManagerHelper.getTodayAppUsageList(context)
+            }
+            val totalTime = usageList.sumOf { it.totalTimeInForegroundMs }
+            val distractionTime = usageList.filter { it.isDistraction }.sumOf { it.totalTimeInForegroundMs }
+
+            _uiState.value = _uiState.value.copy(
+                usageStatsList = usageList,
+                todayScreenTimeMs = totalTime,
+                todayDistractionTimeMs = distractionTime
+            )
+        }
+    }
+
+    private fun isAccessibilityServiceEnabled(ctx: Context): Boolean {
+        return try {
+            val enabledServices = Settings.Secure.getString(
+                ctx.contentResolver,
+                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+            ) ?: ""
+            enabledServices.contains(ctx.packageName)
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    fun toggleStudyTimer(subject: String = "Focused Study", minutes: Int = 25) {
+        if (_uiState.value.isStudyActive) {
+            stopSession()
+        } else {
+            startSession(subject, minutes)
+        }
+    }
+
+    fun startSession(subject: String, minutes: Int) {
+        viewModelScope.launch {
+            val sub = subject.ifBlank { "Deep Study Session" }
+            repository.startSession(sub, minutes)
+            StudyFocusService.start(context)
+            _uiState.value = _uiState.value.copy(
+                isStudyActive = true,
+                currentSubject = sub,
+                plannedMinutes = minutes,
+                remainingSeconds = minutes * 60L
+            )
+            StudyGuardAppWidget.updateAllWidgets(context)
+        }
+    }
+
+    fun stopSession() {
+        viewModelScope.launch {
+            val sessionId = StudyPreferences.getCurrentSessionId(context)
+            val startTime = StudyPreferences.getSessionStartTime(context)
+            val elapsedMs = (System.currentTimeMillis() - startTime).coerceAtLeast(0L)
+            // Even if stopped early, credit actual studied minutes!
+            // Minimum 1 minute credited so study effort is never lost even on short sessions/tests
+            val actualMinutes = ((elapsedMs + 55_000L) / 60_000L).toInt().coerceAtLeast(1)
+            repository.completeSession(sessionId, actualMinutes, 0)
+            StudyPreferences.stopStudySession(context)
+            StudyFocusService.stop(context)
+            _uiState.value = _uiState.value.copy(
+                isStudyActive = false,
+                remainingSeconds = 0L
+            )
+            StudyGuardAppWidget.updateAllWidgets(context)
+        }
+    }
+
+    fun addManualStudySession(subject: String = "Focused Study", minutes: Int) {
+        viewModelScope.launch {
+            repository.addManualStudySession(subject, minutes)
+        }
+    }
+
+    fun deleteSession(session: StudySession) {
+        viewModelScope.launch {
+            repository.deleteSession(session)
+        }
+    }
+
+    fun clearAllSessions() {
+        viewModelScope.launch {
+            repository.clearAllSessions()
+        }
+    }
+
+    // Music Player & Saver
+    fun loadDefaultMusicPresets() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val presets = StudyAudioPlayer.getDefaultPresets()
+            presets.forEach { repository.saveMusicTrack(it) }
+        }
+    }
+
+    fun saveAudioFileFromUri(uri: Uri, customTitle: String, category: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val savedTrack = StudyAudioPlayer.saveAudioFileFromUri(
+                context = context,
+                sourceUri = uri,
+                customTitle = customTitle,
+                category = category
+            )
+            if (savedTrack != null) {
+                repository.saveMusicTrack(savedTrack)
+            }
+        }
+    }
+
+    fun playTrack(track: StudyMusicTrack) {
+        StudyAudioPlayer.playTrack(context, track)
+        viewModelScope.launch {
+            repository.recordMusicPlayedOrSaved()
+        }
+    }
+
+    fun togglePlayPauseAudio() {
+        StudyAudioPlayer.togglePlayPause(context)
+    }
+
+    fun stopAudio() {
+        StudyAudioPlayer.stop()
+    }
+
+    fun toggleLoopAudio() {
+        StudyAudioPlayer.toggleLoop()
+    }
+
+    fun toggleMusicFavorite(trackId: Long, isFavorite: Boolean) {
+        viewModelScope.launch {
+            repository.toggleMusicFavorite(trackId, isFavorite)
+        }
+    }
+
+    fun deleteMusicTrack(track: StudyMusicTrack) {
+        viewModelScope.launch {
+            if (playerState.value.currentTrack?.id == track.id) {
+                StudyAudioPlayer.stop()
+            }
+            repository.deleteMusicTrack(track)
+        }
+    }
+
+    // Playlist Operations
+    fun createPlaylist(name: String, description: String = "", colorHex: String = "#6366F1") {
+        viewModelScope.launch {
+            repository.createPlaylist(name, description, colorHex)
+        }
+    }
+
+    fun deletePlaylist(playlist: PlaylistEntity) {
+        viewModelScope.launch {
+            repository.deletePlaylist(playlist)
+        }
+    }
+
+    fun addTrackToPlaylist(playlistId: Long, trackId: Long) {
+        viewModelScope.launch {
+            repository.addTrackToPlaylist(playlistId, trackId)
+        }
+    }
+
+    fun removeTrackFromPlaylist(playlistId: Long, trackId: Long) {
+        viewModelScope.launch {
+            repository.removeTrackFromPlaylist(playlistId, trackId)
+        }
+    }
+
+    fun getTracksForPlaylist(playlistId: Long) = repository.getTracksForPlaylist(playlistId)
+
+    fun playPlaylist(tracks: List<StudyMusicTrack>) {
+        if (tracks.isNotEmpty()) {
+            playTrack(tracks.first())
+        }
+    }
+
+    // Sync Operations
+    fun triggerSyncNow(onComplete: (Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            delay(500) // Realistic handshake simulation
+            syncManager.recordSyncEvent()
+            _laptopStats.value = syncManager.getLaptopStats()
+            _lastSyncFormatted.value = syncManager.getLastSyncFormatted()
+            onComplete(true)
+        }
+    }
+
+    fun exportSyncData(): String {
+        val active = uiState.value.isStudyActive
+        val subject = uiState.value.currentSubject
+        val rem = (uiState.value.remainingSeconds / 60).toInt()
+        val totalMins = allSessions.value.sumOf { it.actualMinutes }.toLong()
+        val distractions = totalDistractionsCount.value
+        val sessionsCount = allSessions.value.count { it.actualMinutes > 0 || it.isCompleted }
+        val domains = listOf("youtube.com/shorts", "instagram.com", "tiktok.com", "reddit.com", "twitter.com", "netflix.com", "twitch.tv")
+
+        return syncManager.exportSyncJson(
+            isStudyActive = active,
+            activeSubject = subject,
+            remainingMinutes = rem,
+            blockedDomains = domains,
+            phoneMinutes = totalMins,
+            phoneDistractions = distractions,
+            phoneSessions = sessionsCount
+        )
+    }
+
+    fun importSyncData(json: String): Boolean {
+        val success = syncManager.importSyncData(json)
+        if (success) {
+            _laptopStats.value = syncManager.getLaptopStats()
+            _lastSyncFormatted.value = syncManager.getLastSyncFormatted()
+        }
+        return success
+    }
+
+    fun updateLaptopStats(minutes: Long, sessions: Int, distractions: Int, deviceName: String = "Google Chrome (Laptop)") {
+        syncManager.updateLaptopStats(minutes, sessions, distractions, deviceName)
+        _laptopStats.value = syncManager.getLaptopStats()
+        _lastSyncFormatted.value = syncManager.getLastSyncFormatted()
+    }
+
+    fun quickAddLaptopStudy(minutes: Long) {
+        syncManager.addLaptopStudyMinutes(minutes)
+        _laptopStats.value = syncManager.getLaptopStats()
+        _lastSyncFormatted.value = syncManager.getLastSyncFormatted()
+    }
+
+    // Smart Reminders Operations
+    fun toggleReminder(id: String, isEnabled: Boolean) {
+        reminderManager.toggleReminder(id, isEnabled)
+        _remindersList.value = reminderManager.getReminders()
+    }
+
+    fun updateReminderTime(id: String, hour: Int, minute: Int) {
+        reminderManager.updateReminderTime(id, hour, minute)
+        _remindersList.value = reminderManager.getReminders()
+    }
+
+    fun addCustomReminder(title: String, hour: Int, minute: Int, message: String, iconTag: String) {
+        reminderManager.addReminder(title, hour, minute, message, iconTag)
+        _remindersList.value = reminderManager.getReminders()
+    }
+
+    fun deleteReminder(id: String) {
+        reminderManager.deleteReminder(id)
+        _remindersList.value = reminderManager.getReminders()
+    }
+
+    fun sendTestReminder(reminder: SmartReminderItem) {
+        reminderManager.sendTestReminder(reminder)
+    }
+
+    // Auto-Lock Gate (Study-to-Unlock) Operations
+    fun addAutoLockRule(
+        name: String,
+        days: List<Int>,
+        startH: Int,
+        startM: Int,
+        endH: Int,
+        endM: Int,
+        studyMins: Int
+    ) {
+        autoLockManager.addRule(name, days, startH, startM, endH, endM, studyMins)
+        _autoLockRules.value = autoLockManager.getRules()
+        refreshAutoLockStatus()
+    }
+
+    fun toggleAutoLockRule(id: String, isEnabled: Boolean) {
+        autoLockManager.toggleRule(id, isEnabled)
+        _autoLockRules.value = autoLockManager.getRules()
+        refreshAutoLockStatus()
+    }
+
+    fun deleteAutoLockRule(id: String) {
+        autoLockManager.deleteRule(id)
+        _autoLockRules.value = autoLockManager.getRules()
+        refreshAutoLockStatus()
+    }
+
+    fun updateAutoLockRule(rule: com.example.util.AutoLockScheduleRule) {
+        autoLockManager.updateRule(rule)
+        _autoLockRules.value = autoLockManager.getRules()
+        refreshAutoLockStatus()
+    }
+
+    // AI Study Coach Multi-turn Chat
+    fun setCoachRole(role: CoachRole) {
+        _selectedCoachRole.value = role
+    }
+
+    fun sendChatMessage(text: String) {
+        val prompt = text.trim()
+        if (prompt.isBlank()) return
+
+        val userMsg = ChatMessage(sender = MessageSender.USER, text = prompt)
+        _chatMessages.value = _chatMessages.value + userMsg
+
+        viewModelScope.launch {
+            _isAiLoading.value = true
+            val role = _selectedCoachRole.value
+            val history = _chatMessages.value.dropLast(1)
+            when (val result = GeminiStudyCoach.sendChatMessage(history, prompt, role)) {
+                is AiCoachResult.Success -> {
+                    val aiMsg = ChatMessage(
+                        sender = MessageSender.AI,
+                        text = result.responseText,
+                        isLiveApi = result.isLiveApi
+                    )
+                    _chatMessages.value = _chatMessages.value + aiMsg
+                    _aiCoachResponse.value = result.responseText
+                    _isLiveGemini.value = result.isLiveApi
+                }
+                is AiCoachResult.Error -> {
+                    val errorMsg = ChatMessage(
+                        sender = MessageSender.AI,
+                        text = "AI Note: ${result.message}",
+                        isLiveApi = false
+                    )
+                    _chatMessages.value = _chatMessages.value + errorMsg
+                    _aiCoachResponse.value = errorMsg.text
+                    _isLiveGemini.value = false
+                }
+            }
+            _isAiLoading.value = false
+        }
+    }
+
+    fun clearChat() {
+        _chatMessages.value = listOf(
+            ChatMessage(
+                sender = MessageSender.AI,
+                text = "✨ Chat reset! Ready to crush your next study session.",
+                isLiveApi = true
+            )
+        )
+    }
+
+    fun askAiCoach(prompt: String) {
+        sendChatMessage(prompt)
+    }
+
+    // Custom App Blocker & Lock Simulator
+    fun addCustomBlockedApp(packageName: String, appName: String, category: String) {
+        viewModelScope.launch {
+            repository.addCustomApp(packageName, appName, category, isDistraction = true)
+        }
+    }
+
+    fun simulateDistractionLock(appName: String) {
+        val todayMins = getTodayStudyMinutes()
+        val activeSchedule = autoLockManager.getActiveRule(todayMins)
+        val isScheduled = activeSchedule != null && !uiState.value.isStudyActive
+
+        val intent = android.content.Intent(context, com.example.ui.lock.BlockedOverlayActivity::class.java).apply {
+            flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or
+                    android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                    android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra(com.example.ui.lock.BlockedOverlayActivity.EXTRA_BLOCKED_APP_NAME, appName)
+            putExtra(com.example.ui.lock.BlockedOverlayActivity.EXTRA_IS_SCHEDULED_LOCK, isScheduled)
+            putExtra(com.example.ui.lock.BlockedOverlayActivity.EXTRA_RULE_NAME, activeSchedule?.rule?.name ?: "Study-to-Unlock Gate")
+            putExtra(com.example.ui.lock.BlockedOverlayActivity.EXTRA_REMAINING_STUDY_MINS, activeSchedule?.remainingStudyMinutes ?: 60)
+            putExtra(com.example.ui.lock.BlockedOverlayActivity.EXTRA_REQUIRED_STUDY_MINS, activeSchedule?.rule?.requiredStudyMinutes ?: 120)
+            putExtra(com.example.ui.lock.BlockedOverlayActivity.EXTRA_STUDIED_MINS, todayMins)
+        }
+        context.startActivity(intent)
+    }
+
+    // Long Study Hours Marathon Engine (e.g. 45 min study / 15 min break x 4 cycles)
+    fun startMarathon(config: MarathonConfig) {
+        marathonJob?.cancel()
+        _marathonState.value = MarathonState(
+            isActive = true,
+            isPaused = false,
+            config = config,
+            currentCycle = 1,
+            currentPhase = MarathonPhase.STUDY,
+            phaseRemainingSeconds = config.studyDurationMinutes * 60L,
+            totalRemainingSeconds = config.totalMinutes * 60L,
+            completedStudyMinutes = 0
+        )
+
+        // Arm shields and start focus service for study cycle 1
+        startSession("${config.title} (Cycle 1)", config.studyDurationMinutes)
+
+        marathonJob = viewModelScope.launch {
+            while (true) {
+                delay(1000L)
+                val current = _marathonState.value
+                if (!current.isActive) break
+                if (current.isPaused) continue
+
+                val newPhaseSeconds = current.phaseRemainingSeconds - 1
+                val newTotalSeconds = (current.totalRemainingSeconds - 1).coerceAtLeast(0)
+
+                if (newPhaseSeconds <= 0) {
+                    when (current.currentPhase) {
+                        MarathonPhase.STUDY -> {
+                            val newCompleted = current.completedStudyMinutes + current.config.studyDurationMinutes
+                            completeCurrentSession()
+                            if (current.currentCycle >= current.config.totalCycles) {
+                                // Marathon complete!
+                                _marathonState.value = current.copy(
+                                    isActive = false,
+                                    currentPhase = MarathonPhase.COMPLETED,
+                                    phaseRemainingSeconds = 0,
+                                    totalRemainingSeconds = 0,
+                                    completedStudyMinutes = newCompleted
+                                )
+                                break
+                            } else {
+                                // Transition to break
+                                _marathonState.value = current.copy(
+                                    currentPhase = MarathonPhase.BREAK,
+                                    phaseRemainingSeconds = current.config.breakDurationMinutes * 60L,
+                                    totalRemainingSeconds = newTotalSeconds,
+                                    completedStudyMinutes = newCompleted
+                                )
+                                // Temporarily relax locks during break
+                                StudyPreferences.setStudyActive(context, false)
+                                _uiState.value = _uiState.value.copy(isStudyActive = false)
+                                StudyGuardAppWidget.updateAllWidgets(context)
+                            }
+                        }
+                        MarathonPhase.BREAK -> {
+                            val nextCycle = current.currentCycle + 1
+                            _marathonState.value = current.copy(
+                                currentCycle = nextCycle,
+                                currentPhase = MarathonPhase.STUDY,
+                                phaseRemainingSeconds = current.config.studyDurationMinutes * 60L,
+                                totalRemainingSeconds = newTotalSeconds
+                            )
+                            // Re-arm locks for next cycle
+                            startSession("${current.config.title} (Cycle $nextCycle)", current.config.studyDurationMinutes)
+                        }
+                        else -> break
+                    }
+                } else {
+                    _marathonState.value = current.copy(
+                        phaseRemainingSeconds = newPhaseSeconds,
+                        totalRemainingSeconds = newTotalSeconds
+                    )
+                }
+            }
+        }
+    }
+
+    fun pauseMarathon() {
+        _marathonState.value = _marathonState.value.copy(isPaused = true)
+    }
+
+    fun resumeMarathon() {
+        _marathonState.value = _marathonState.value.copy(isPaused = false)
+    }
+
+    fun skipMarathonBreak() {
+        val current = _marathonState.value
+        if (current.isActive && current.currentPhase == MarathonPhase.BREAK) {
+            val nextCycle = current.currentCycle + 1
+            _marathonState.value = current.copy(
+                currentCycle = nextCycle,
+                currentPhase = MarathonPhase.STUDY,
+                phaseRemainingSeconds = current.config.studyDurationMinutes * 60L
+            )
+            startSession("${current.config.title} (Cycle $nextCycle)", current.config.studyDurationMinutes)
+        }
+    }
+
+    fun stopMarathon() {
+        marathonJob?.cancel()
+        marathonJob = null
+        _marathonState.value = _marathonState.value.copy(isActive = false, currentPhase = MarathonPhase.IDLE)
+        stopSession()
+    }
+
+    fun toggleFloatingWidget(enable: Boolean) {
+        if (enable) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(context)) {
+                return
+            }
+            FloatingFocusWidgetService.start(context)
+            _uiState.value = _uiState.value.copy(isFloatingWidgetActive = true)
+        } else {
+            FloatingFocusWidgetService.stop(context)
+            _uiState.value = _uiState.value.copy(isFloatingWidgetActive = false)
+        }
+    }
+
+    fun toggleAppDistraction(packageName: String, isDistraction: Boolean) {
+        viewModelScope.launch {
+            repository.setAppDistraction(packageName, isDistraction)
+        }
+    }
+
+    fun toggleYouTubeShortsBlocking(enabled: Boolean) {
+        StudyPreferences.setBlockYouTubeShorts(context, enabled)
+        _uiState.value = _uiState.value.copy(isYouTubeShortsBlocked = enabled)
+        StudyGuardAppWidget.updateAllWidgets(context)
+    }
+
+    fun toggleStrictUninstallLock(enabled: Boolean) {
+        StudyPreferences.setStrictUninstallLock(context, enabled)
+        _uiState.value = _uiState.value.copy(isStrictUninstallLockEnabled = enabled)
+    }
+
+    fun setSearchQuery(query: String) {
+        _uiState.value = _uiState.value.copy(searchQuery = query)
+    }
+
+    fun setCategoryFilter(category: String) {
+        _uiState.value = _uiState.value.copy(selectedCategoryFilter = category)
+    }
+
+    fun blockAllSocialAndGames() {
+        viewModelScope.launch {
+            val distractions = InstalledAppsHelper.KNOWN_DISTRACTIONS
+            val currentApps = allApps.value
+            for (app in currentApps) {
+                if (distractions.contains(app.packageName) ||
+                    app.category.equals("Social", ignoreCase = true) ||
+                    app.category.equals("Games", ignoreCase = true)
+                ) {
+                    repository.setAppDistraction(app.packageName, true)
+                }
+            }
+        }
+    }
+
+    fun allowAllApps() {
+        viewModelScope.launch {
+            val currentApps = allApps.value
+            for (app in currentApps) {
+                repository.setAppDistraction(app.packageName, false)
+            }
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        StudyAudioPlayer.stop()
+    }
+
+    class Factory(
+        private val repository: StudyRepository,
+        private val context: Context
+    ) : ViewModelProvider.Factory {
+        @Suppress("UNCHECKED_CAST")
+        override fun <T : ViewModel> create(modelClass: Class<T>): T {
+            return StudyViewModel(repository, context) as T
+        }
+    }
+}

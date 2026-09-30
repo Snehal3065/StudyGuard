@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/floating_widget_root"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/bg_floating_widget"
+    android:padding="8dp"
+    android:elevation="12dp">
+
+    <!-- Compact Floating Pill -->
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <ImageView
+            android:id="@+id/iv_widget_badge"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:src="@drawable/luffy_study_image_1790402150695"
+            android:contentDescription="Study Icon" />
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginStart="8dp"
+            android:layout_marginEnd="6dp">
+
+            <TextView
+                android:id="@+id/tv_widget_timer"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="25:00"
+                android:textColor="#FFFFFF"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tv_widget_status"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="StudyGuard"
+                android:textColor="#818CF8"
+                android:textSize="10sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Expanded Controls -->
+    <LinearLayout
+        android:id="@+id/layout_widget_expanded"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:visibility="gone"
+        android:layout_marginTop="8dp">
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#334155"
+            android:layout_marginBottom="6dp" />
+
+        <TextView
+            android:id="@+id/btn_widget_timer_toggle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Start 25m"
+            android:textColor="#10B981"
+            android:textStyle="bold"
+            android:textSize="12sp"
+            android:padding="4dp"
+            android:gravity="center" />
+
+        <TextView
+            android:id="@+id/btn_widget_open_app"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Open App"
+            android:textColor="#818CF8"
+            android:textSize="12sp"
+            android:padding="4dp"
+            android:gravity="center" />
+
+        <TextView
+            android:id="@+id/btn_widget_close"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Dismiss"
+            android:textColor="#94A3B8"
+            android:textSize="11sp"
+            android:padding="4dp"
+            android:gravity="center" />
+    </LinearLayout>
+
+</LinearLayout>
