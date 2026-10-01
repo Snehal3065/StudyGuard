@@ -122,10 +122,16 @@
       display: flex;
       gap: 10px;
       max-width: 520px;
+      width: 100%;
+      box-sizing: border-box;
       margin: 0 auto;
+      align-items: center;
     }
     .sg-home-input {
       flex: 1;
+      min-width: 0;
+      max-width: 100%;
+      box-sizing: border-box;
       background: #0B0F19;
       border: 1px solid #334155;
       color: white;
@@ -133,11 +139,20 @@
       padding: 12px 16px;
       font-size: 13px;
       outline: none;
+      text-overflow: ellipsis;
+    }
+    .sg-home-input::placeholder {
+      color: #64748B;
+      text-overflow: ellipsis;
+      overflow: hidden;
+      white-space: nowrap;
     }
     .sg-home-input:focus {
       border-color: #818CF8;
     }
     .sg-home-btn {
+      flex-shrink: 0;
+      white-space: nowrap;
       background: linear-gradient(135deg, #4F46E5, #7C3AED);
       color: white;
       border: none;

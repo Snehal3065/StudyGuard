@@ -212,8 +212,21 @@
       margin-bottom: 4px;
       display: block;
     }
+    input, select, textarea {
+      box-sizing: border-box;
+      max-width: 100%;
+    }
+    input::placeholder, textarea::placeholder {
+      color: #64748B;
+      text-overflow: ellipsis;
+      overflow: hidden;
+      white-space: nowrap;
+    }
     .url-input {
       width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
       background: #0B0F19;
       border: 1px solid #334155;
       color: #F8FAFC;
@@ -222,6 +235,7 @@
       font-size: 12px;
       outline: none;
       transition: border-color 0.2s;
+      text-overflow: ellipsis;
     }
     .url-input:focus {
       border-color: #818CF8;
@@ -848,9 +862,9 @@
       <div style="font-size: 11px; color: #94A3B8; margin-bottom: 6px;">
         Enter Pairing Code from Phone App (Sync Tab):
       </div>
-      <div style="display: flex; gap: 6px; margin-bottom: 10px;">
-        <input type="text" id="inputSyncPairingCode" class="url-input" placeholder="e.g. SG-123456" style="text-transform: uppercase;">
-        <button type="button" id="btnPairDevice" class="btn-action" style="width: 80px; padding: 6px 10px;">
+      <div style="display: flex; gap: 6px; margin-bottom: 10px; width: 100%; align-items: center;">
+        <input type="text" id="inputSyncPairingCode" class="url-input" placeholder="e.g. SG-123456" style="flex: 1; min-width: 0; text-transform: uppercase;">
+        <button type="button" id="btnPairDevice" class="btn-action" style="flex-shrink: 0; width: 80px; padding: 6px 10px;">
           Pair
         </button>
       </div>

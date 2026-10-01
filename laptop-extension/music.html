@@ -461,6 +461,8 @@
       padding: 24px;
       width: 420px;
       max-width: 90vw;
+      box-sizing: border-box;
+      overflow: hidden;
     }
     .modal-title {
       font-size: 16px;
@@ -468,8 +470,21 @@
       color: #FFFFFF;
       margin-bottom: 14px;
     }
+    input, select, textarea {
+      box-sizing: border-box;
+      max-width: 100%;
+    }
+    input::placeholder, textarea::placeholder {
+      color: #64748B;
+      text-overflow: ellipsis;
+      overflow: hidden;
+      white-space: nowrap;
+    }
     .input-field {
       width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
       background: #0B0F19;
       border: 1px solid #334155;
       color: #F8FAFC;
@@ -478,6 +493,7 @@
       font-size: 13px;
       outline: none;
       margin-bottom: 12px;
+      text-overflow: ellipsis;
     }
     .input-field:focus {
       border-color: #818CF8;
