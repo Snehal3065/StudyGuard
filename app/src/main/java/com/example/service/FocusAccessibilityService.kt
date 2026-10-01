@@ -10,6 +10,8 @@ import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.Toast
 import com.example.StudyGuardApp
 import com.example.ui.lock.BlockedOverlayActivity
+import com.example.util.AppLimitCheckResult
+import com.example.util.AppLimitManager
 import com.example.util.EmergencyLockManager
 import com.example.util.ScheduledAutoLockManager
 import com.example.util.StudyPreferences
@@ -24,6 +26,9 @@ class FocusAccessibilityService : AccessibilityService() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var lastInterceptTime = 0L
     private var lastShortsInterceptTime = 0L
+    private var lastLimitInterceptTime = 0L
+    private var currentForegroundPackage: String? = null
+    private var foregroundStartTime: Long = 0L
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
@@ -32,6 +37,20 @@ class FocusAccessibilityService : AccessibilityService() {
         val isNuclearActive = EmergencyLockManager.getInstance(context).isNuclearLockActive()
         val isStudyActive = StudyPreferences.isStudyActive(context) || isNuclearActive
         val packageName = event.packageName?.toString() ?: return
+
+        // Track foreground time for app limits
+        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            val now = System.currentTimeMillis()
+            val prev = currentForegroundPackage
+            if (prev != null && prev != packageName && foregroundStartTime > 0L) {
+                val elapsed = now - foregroundStartTime
+                if (elapsed > 1000L) {
+                    AppLimitManager.getInstance(context).recordForegroundUsage(prev, elapsed)
+                }
+            }
+            currentForegroundPackage = packageName
+            foregroundStartTime = now
+        }
 
         // Ignore our own app & system essentials (system UI, launchers, input methods)
         if (isSystemEssentialPackage(packageName)) {
@@ -54,8 +73,82 @@ class FocusAccessibilityService : AccessibilityService() {
             return
         }
 
-        // 3. Distraction App Interception (Timer, Nuclear Lock, or Scheduled Auto-Lock Gate)
+        // 3. App Daily Limit & Half-Time Cooldown Check (Applies to all configured apps!)
+        if (checkAppLimitLockout(packageName)) {
+            return
+        }
+
+        // 4. Distraction App Interception (Timer, Nuclear Lock, or Scheduled Auto-Lock Gate)
         checkAndBlockDistractionApp(packageName, isStudyActive, isNuclearActive)
+    }
+
+    private fun checkAppLimitLockout(packageName: String): Boolean {
+        val now = System.currentTimeMillis()
+        val limitManager = AppLimitManager.getInstance(applicationContext)
+        val limitResult = limitManager.checkAppLimit(applicationContext, packageName)
+
+        if (limitResult is AppLimitCheckResult.LimitExceeded) {
+            if (now - lastLimitInterceptTime > 1200L) {
+                lastLimitInterceptTime = now
+                val appName = try {
+                    val appInfo = packageManager.getApplicationInfo(packageName, 0)
+                    packageManager.getApplicationLabel(appInfo).toString()
+                } catch (e: Exception) {
+                    packageName
+                }
+                performGlobalAction(GLOBAL_ACTION_HOME)
+                launchAppLimitBlockScreen(
+                    appName = appName,
+                    isCooldown = false,
+                    limitMins = limitResult.limitMinutes,
+                    usedMins = limitResult.usedMinutes,
+                    cooldownRemainingSec = 0L
+                )
+            }
+            return true
+        } else if (limitResult is AppLimitCheckResult.CooldownActive) {
+            if (now - lastLimitInterceptTime > 1200L) {
+                lastLimitInterceptTime = now
+                val appName = try {
+                    val appInfo = packageManager.getApplicationInfo(packageName, 0)
+                    packageManager.getApplicationLabel(appInfo).toString()
+                } catch (e: Exception) {
+                    packageName
+                }
+                performGlobalAction(GLOBAL_ACTION_HOME)
+                launchAppLimitBlockScreen(
+                    appName = appName,
+                    isCooldown = true,
+                    limitMins = limitResult.limitMinutes,
+                    usedMins = limitResult.usedMinutes,
+                    cooldownRemainingSec = limitResult.remainingCooldownSeconds
+                )
+            }
+            return true
+        }
+
+        return false
+    }
+
+    private fun launchAppLimitBlockScreen(
+        appName: String,
+        isCooldown: Boolean,
+        limitMins: Int,
+        usedMins: Int,
+        cooldownRemainingSec: Long
+    ) {
+        val intent = Intent(applicationContext, BlockedOverlayActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra(BlockedOverlayActivity.EXTRA_BLOCKED_APP_NAME, appName)
+            putExtra(BlockedOverlayActivity.EXTRA_IS_APP_LIMIT, !isCooldown)
+            putExtra(BlockedOverlayActivity.EXTRA_IS_COOLDOWN, isCooldown)
+            putExtra(BlockedOverlayActivity.EXTRA_LIMIT_MINS, limitMins)
+            putExtra(BlockedOverlayActivity.EXTRA_USED_MINS, usedMins)
+            putExtra(BlockedOverlayActivity.EXTRA_COOLDOWN_REMAINING_SEC, cooldownRemainingSec)
+        }
+        applicationContext.startActivity(intent)
     }
 
     private fun handleYouTubeAccessibility(event: AccessibilityEvent) {

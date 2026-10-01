@@ -80,6 +80,14 @@ class StudyViewModel(
 ) : ViewModel() {
 
     private val emergencyLockManager = com.example.util.EmergencyLockManager.getInstance(context)
+    private val appLimitManager = com.example.util.AppLimitManager.getInstance(context)
+    val appLimitsMap: StateFlow<Map<String, com.example.util.AppLimitItemState>> = appLimitManager.limitsFlow
+
+    private fun showToast(msg: String) {
+        viewModelScope.launch(Dispatchers.Main) {
+            android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
 
     private val _uiState = MutableStateFlow(
         StudyUiState(
@@ -692,6 +700,10 @@ class StudyViewModel(
 
     // Custom App Blocker & Lock Simulator
     fun addCustomBlockedApp(packageName: String, appName: String, category: String) {
+        if (emergencyLockManager.isNuclearLockActive()) {
+            showToast("☢️ Nuclear Strict Focus Lock is active! Cannot add custom apps during lockdown.")
+            return
+        }
         viewModelScope.launch {
             repository.addCustomApp(packageName, appName, category, isDistraction = true)
         }
@@ -837,12 +849,20 @@ class StudyViewModel(
     }
 
     fun toggleAppDistraction(packageName: String, isDistraction: Boolean) {
+        if (emergencyLockManager.isNuclearLockActive()) {
+            showToast("☢️ Nuclear Strict Focus Lock is active! App locklist is frozen.")
+            return
+        }
         viewModelScope.launch {
             repository.setAppDistraction(packageName, isDistraction)
         }
     }
 
     fun toggleYouTubeShortsBlocking(enabled: Boolean) {
+        if (emergencyLockManager.isNuclearLockActive() && !enabled) {
+            showToast("☢️ Nuclear Strict Focus Lock is active! Cannot disable shields.")
+            return
+        }
         StudyPreferences.setBlockYouTubeShorts(context, enabled)
         _uiState.value = _uiState.value.copy(isYouTubeShortsBlocked = enabled)
         StudyGuardAppWidget.updateAllWidgets(context)
@@ -862,6 +882,10 @@ class StudyViewModel(
     }
 
     fun blockAllSocialAndGames() {
+        if (emergencyLockManager.isNuclearLockActive()) {
+            showToast("☢️ Nuclear Strict Focus Lock is active! App locklist is frozen.")
+            return
+        }
         viewModelScope.launch {
             val distractions = InstalledAppsHelper.KNOWN_DISTRACTIONS
             val currentApps = allApps.value
@@ -877,12 +901,48 @@ class StudyViewModel(
     }
 
     fun allowAllApps() {
+        if (emergencyLockManager.isNuclearLockActive()) {
+            showToast("☢️ Nuclear Strict Focus Lock is active! App locklist is frozen.")
+            return
+        }
         viewModelScope.launch {
             val currentApps = allApps.value
             for (app in currentApps) {
                 repository.setAppDistraction(app.packageName, false)
             }
         }
+    }
+
+    fun setAppLimit(packageName: String, limitMinutes: Int): Boolean {
+        val success = appLimitManager.setAppLimit(packageName, limitMinutes)
+        if (!success) {
+            showToast("🔒 Limit is locked until tomorrow morning (6:00 AM) and cannot be adjusted today!")
+        } else {
+            if (limitMinutes > 0) {
+                showToast("⏱️ Limit set to ${limitMinutes}m! Locked until tomorrow 6:00 AM.")
+            } else {
+                showToast("Daily limit removed.")
+            }
+        }
+        return success
+    }
+
+    fun removeAppLimit(packageName: String): Boolean {
+        val success = appLimitManager.removeAppLimit(packageName)
+        if (!success) {
+            showToast("🔒 Limit is locked until tomorrow morning (6:00 AM) and cannot be removed today!")
+        } else {
+            showToast("Daily limit removed.")
+        }
+        return success
+    }
+
+    fun canModifyAppLimit(packageName: String): Boolean {
+        return appLimitManager.canModifyLimit(packageName)
+    }
+
+    fun refreshAppLimits() {
+        appLimitManager.refreshAll()
     }
 
     override fun onCleared() {

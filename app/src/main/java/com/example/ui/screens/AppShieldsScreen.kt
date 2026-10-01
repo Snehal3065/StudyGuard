@@ -39,6 +39,10 @@ fun AppShieldsScreen(
     allApps: List<BlockedAppEntity>,
     autoLockRules: List<AutoLockScheduleRule>,
     activeAutoLockStatus: ActiveAutoLockStatus?,
+    appLimitsMap: Map<String, com.example.util.AppLimitItemState> = emptyMap(),
+    onSetAppLimit: (packageName: String, limitMinutes: Int) -> Boolean = { _, _ -> true },
+    onRemoveAppLimit: (packageName: String) -> Boolean = { true },
+    canModifyAppLimit: (packageName: String) -> Boolean = { true },
     onToggleYouTubeShorts: (Boolean) -> Unit,
     onToggleAppDistraction: (packageName: String, isDistraction: Boolean) -> Unit,
     onBlockAllSocialAndGames: () -> Unit,
@@ -55,9 +59,9 @@ fun AppShieldsScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val filters = listOf("All", "Locked (Distractions)", "Allowed (Study Tools)", "Social", "Games")
+    val filters = listOf("All", "Locked (Distractions)", "Allowed (Study Tools)", "App Limits", "Social", "Games")
 
-    val filteredApps = remember(allApps, uiState.searchQuery, uiState.selectedCategoryFilter) {
+    val filteredApps = remember(allApps, uiState.searchQuery, uiState.selectedCategoryFilter, appLimitsMap) {
         allApps.filter { app ->
             val matchesSearch = app.appName.contains(uiState.searchQuery, ignoreCase = true) ||
                     app.packageName.contains(uiState.searchQuery, ignoreCase = true)
@@ -65,6 +69,10 @@ fun AppShieldsScreen(
             val matchesFilter = when (uiState.selectedCategoryFilter) {
                 "Locked (Distractions)" -> app.isDistraction
                 "Allowed (Study Tools)" -> !app.isDistraction
+                "App Limits" -> {
+                    val limit = appLimitsMap[app.packageName]
+                    limit != null && limit.limitMinutes > 0
+                }
                 "Social" -> app.category.equals("Social", ignoreCase = true)
                 "Games" -> app.category.equals("Games", ignoreCase = true)
                 else -> true
@@ -76,11 +84,13 @@ fun AppShieldsScreen(
 
     val lockedCount = remember(allApps) { allApps.count { it.isDistraction } }
     val allowedCount = remember(allApps) { allApps.count { !it.isDistraction } }
+    val limitsCount = remember(appLimitsMap) { appLimitsMap.values.count { it.limitMinutes > 0 } }
 
     var activeSubTab by remember(initialSubTab) { mutableIntStateOf(initialSubTab) } // 0: Custom Locks, 1: Blocked Apps, 2: Laptop & Web
     var showAddCustomAppDialog by remember { mutableStateOf(false) }
     var showAddScheduleDialog by remember { mutableStateOf(false) }
     var editingRule by remember { mutableStateOf<AutoLockScheduleRule?>(null) }
+    var selectedAppForLimit by remember { mutableStateOf<BlockedAppEntity?>(null) }
 
     Column(
         modifier = modifier.fillMaxSize()
@@ -155,6 +165,40 @@ fun AppShieldsScreen(
                         .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    // Nuclear Mode Active Lockdown Warning Banner
+                    if (uiState.isNuclearLockActive) {
+                        Surface(
+                            color = Color(0xFF450A0A),
+                            shape = RoundedCornerShape(14.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFFEF4444)),
+                            modifier = Modifier.fillMaxWidth().testTag("nuclear_lock_warning_banner")
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Text("☢️", fontSize = 26.sp)
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "NUCLEAR LOCKDOWN ACTIVE (${uiState.nuclearFormattedRemaining})",
+                                        fontWeight = FontWeight.Black,
+                                        fontSize = 13.sp,
+                                        color = Color(0xFFFCA5A5)
+                                    )
+                                    Text(
+                                        text = "App blocklist is frozen. You cannot toggle, unlock, or modify distraction apps during nuclear lockdown.",
+                                        fontSize = 11.5.sp,
+                                        color = Color(0xFFFECACA),
+                                        lineHeight = 15.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     // Active Scheduled Gate Banner if currently restricting
                     if (activeAutoLockStatus != null) {
                         Surface(
@@ -247,7 +291,14 @@ fun AppShieldsScreen(
 
                                 Switch(
                                     checked = uiState.isYouTubeShortsBlocked,
-                                    onCheckedChange = onToggleYouTubeShorts,
+                                    onCheckedChange = {
+                                        if (!uiState.isNuclearLockActive) {
+                                            onToggleYouTubeShorts(it)
+                                        } else {
+                                            Toast.makeText(context, "☢️ Locked during Nuclear Mode!", Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
+                                    enabled = !uiState.isNuclearLockActive,
                                     modifier = Modifier.testTag("youtube_shorts_switch")
                                 )
                             }
@@ -261,7 +312,7 @@ fun AppShieldsScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "$lockedCount locked • $allowedCount allowed",
+                            text = "$lockedCount locked • $allowedCount allowed • $limitsCount timed",
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -269,7 +320,14 @@ fun AppShieldsScreen(
 
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             FilledTonalButton(
-                                onClick = onBlockAllSocialAndGames,
+                                onClick = {
+                                    if (!uiState.isNuclearLockActive) {
+                                        onBlockAllSocialAndGames()
+                                    } else {
+                                        Toast.makeText(context, "☢️ Locked during Nuclear Mode!", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                enabled = !uiState.isNuclearLockActive,
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                                 shape = RoundedCornerShape(10.dp),
                                 modifier = Modifier.height(32.dp).testTag("lock_social_games_button")
@@ -277,7 +335,14 @@ fun AppShieldsScreen(
                                 Text("Lock Social & Games", fontSize = 11.sp)
                             }
                             OutlinedButton(
-                                onClick = onAllowAllApps,
+                                onClick = {
+                                    if (!uiState.isNuclearLockActive) {
+                                        onAllowAllApps()
+                                    } else {
+                                        Toast.makeText(context, "☢️ Locked during Nuclear Mode!", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                enabled = !uiState.isNuclearLockActive,
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                                 shape = RoundedCornerShape(10.dp),
                                 modifier = Modifier.height(32.dp).testTag("allow_all_apps_button")
@@ -285,7 +350,14 @@ fun AppShieldsScreen(
                                 Text("Allow All", fontSize = 11.sp)
                             }
                             IconButton(
-                                onClick = { showAddCustomAppDialog = true },
+                                onClick = {
+                                    if (!uiState.isNuclearLockActive) {
+                                        showAddCustomAppDialog = true
+                                    } else {
+                                        Toast.makeText(context, "☢️ Locked during Nuclear Mode!", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                enabled = !uiState.isNuclearLockActive,
                                 modifier = Modifier.size(32.dp)
                             ) {
                                 Icon(Icons.Default.AddCircle, contentDescription = "Add Custom App", tint = PrimaryIndigo)
@@ -354,13 +426,23 @@ fun AppShieldsScreen(
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             items(filteredApps, key = { it.packageName }) { app ->
+                                val limitState = appLimitsMap[app.packageName]
                                 AppShieldRow(
                                     app = app,
+                                    limitState = limitState,
+                                    isNuclearLockActive = uiState.isNuclearLockActive,
                                     onToggle = { isChecked ->
-                                        onToggleAppDistraction(app.packageName, isChecked)
+                                        if (!uiState.isNuclearLockActive) {
+                                            onToggleAppDistraction(app.packageName, isChecked)
+                                        } else {
+                                            Toast.makeText(context, "☢️ App list is frozen during active Nuclear Strict Mode!", Toast.LENGTH_SHORT).show()
+                                        }
                                     },
                                     onTestLock = {
                                         onSimulateLockOverlay(app.appName)
+                                    },
+                                    onOpenLimitConfig = {
+                                        selectedAppForLimit = app
                                     }
                                 )
                             }
@@ -462,103 +544,433 @@ fun AppShieldsScreen(
             onDismiss = { editingRule = null }
         )
     }
+
+    // App Limit Configuration & Locked Warning Dialogs
+    selectedAppForLimit?.let { app ->
+        val limitState = appLimitsMap[app.packageName]
+        val canModify = canModifyAppLimit(app.packageName)
+
+        if (!canModify && limitState != null) {
+            // Locked until next morning dialog
+            AlertDialog(
+                onDismissRequest = { selectedAppForLimit = null },
+                icon = {
+                    Icon(
+                        Icons.Default.Lock,
+                        contentDescription = null,
+                        tint = TertiaryAmber,
+                        modifier = Modifier.size(36.dp)
+                    )
+                },
+                title = {
+                    Text("Timer Locked Until 6:00 AM", fontWeight = FontWeight.Bold)
+                },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            text = "You set a strict ${limitState.limitMinutes}-minute daily limit for ${app.appName} today.",
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 13.5.sp
+                        )
+                        Text(
+                            text = "To eliminate impulsive bypasses and keep your digital discipline solid, timers CANNOT be adjusted or increased until tomorrow morning.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 12.5.sp,
+                            lineHeight = 17.sp
+                        )
+                        Surface(
+                            color = TertiaryAmber.copy(alpha = 0.15f),
+                            shape = RoundedCornerShape(10.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, TertiaryAmber.copy(alpha = 0.4f))
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(Icons.Default.HourglassTop, contentDescription = null, tint = TertiaryAmber, modifier = Modifier.size(16.dp))
+                                Text(
+                                    text = "Unlocks in: ${limitState.modifyLockRemainingFormatted}",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TertiaryAmber
+                                )
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = { selectedAppForLimit = null },
+                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryIndigo)
+                    ) {
+                        Text("Understood")
+                    }
+                }
+            )
+        } else {
+            // Set/Edit Daily Limit Dialog
+            var chosenMinutes by remember(app.packageName) {
+                mutableIntStateOf(if (limitState != null && limitState.limitMinutes > 0) limitState.limitMinutes else 30)
+            }
+            val presets = listOf(15, 30, 45, 60, 90, 120)
+
+            AlertDialog(
+                onDismissRequest = { selectedAppForLimit = null },
+                icon = {
+                    Icon(
+                        Icons.Default.Timer,
+                        contentDescription = null,
+                        tint = PrimaryIndigo,
+                        modifier = Modifier.size(36.dp)
+                    )
+                },
+                title = {
+                    Text(
+                        text = "Daily Limit: ${app.appName}",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 17.sp
+                    )
+                },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(
+                            text = "Set daily usage limit. App locks when time is used up:",
+                            fontSize = 12.5.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        // Presets
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            presets.take(3).forEach { mins ->
+                                FilterChip(
+                                    selected = chosenMinutes == mins,
+                                    onClick = { chosenMinutes = mins },
+                                    label = { Text("${mins}m", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            presets.drop(3).forEach { mins ->
+                                FilterChip(
+                                    selected = chosenMinutes == mins,
+                                    onClick = { chosenMinutes = mins },
+                                    label = { Text("${mins}m", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+
+                        // Strict Discipline Notice
+                        Surface(
+                            color = Color(0xFF1E1B4B),
+                            shape = RoundedCornerShape(12.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, TertiaryAmber.copy(alpha = 0.4f))
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(10.dp),
+                                verticalArrangement = Arrangement.spacedBy(5.dp)
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Icon(Icons.Default.Shield, contentDescription = null, tint = TertiaryAmber, modifier = Modifier.size(15.dp))
+                                    Text(
+                                        text = "Strict Discipline Rules",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 11.5.sp,
+                                        color = TertiaryAmber
+                                    )
+                                }
+                                Text(
+                                    text = "• 🔒 Locked Until Morning: Once set, you CANNOT change or remove this timer until tomorrow 6:00 AM.",
+                                    fontSize = 10.5.sp,
+                                    color = Color.White
+                                )
+                                Text(
+                                    text = "• ⏸️ Half-Time Cooldown: After ${chosenMinutes / 2}m of use, the app auto-locks for a 2-hour cooldown before remaining time can be used.",
+                                    fontSize = 10.5.sp,
+                                    color = Color.White
+                                )
+                                Text(
+                                    text = "• ⏳ Total Lockout: Once ${chosenMinutes}m is used, the app is completely locked until 6:00 AM tomorrow.",
+                                    fontSize = 10.5.sp,
+                                    color = Color.White
+                                )
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            val success = onSetAppLimit(app.packageName, chosenMinutes)
+                            if (success) {
+                                Toast.makeText(context, "Daily limit of ${chosenMinutes}m activated! Locked until tomorrow 6 AM.", Toast.LENGTH_LONG).show()
+                            }
+                            selectedAppForLimit = null
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryIndigo),
+                        modifier = Modifier.testTag("confirm_set_limit_btn")
+                    ) {
+                        Text("Lock In (${chosenMinutes}m)")
+                    }
+                },
+                dismissButton = {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        if (limitState != null && limitState.limitMinutes > 0 && canModify) {
+                            TextButton(
+                                onClick = {
+                                    onRemoveAppLimit(app.packageName)
+                                    Toast.makeText(context, "Timer removed", Toast.LENGTH_SHORT).show()
+                                    selectedAppForLimit = null
+                                }
+                            ) {
+                                Text("Remove", color = Color(0xFFEF4444))
+                            }
+                        }
+                        TextButton(onClick = { selectedAppForLimit = null }) {
+                            Text("Cancel")
+                        }
+                    }
+                }
+            )
+        }
+    }
 }
 
 @Composable
 private fun AppShieldRow(
     app: BlockedAppEntity,
+    limitState: com.example.util.AppLimitItemState?,
+    isNuclearLockActive: Boolean,
     onToggle: (Boolean) -> Unit,
-    onTestLock: () -> Unit
+    onTestLock: () -> Unit,
+    onOpenLimitConfig: () -> Unit
 ) {
+    val context = LocalContext.current
+    val hasLimit = limitState != null && limitState.limitMinutes > 0
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (app.isDistraction)
-                MaterialTheme.colorScheme.surfaceVariant
-            else
-                MaterialTheme.colorScheme.surface
-        )
+            containerColor = when {
+                limitState?.isLimitExceeded == true -> Color(0xFF450A0A).copy(alpha = 0.4f)
+                limitState?.isInCooldown == true -> Color(0xFF1E1B4B).copy(alpha = 0.5f)
+                app.isDistraction -> MaterialTheme.colorScheme.surfaceVariant
+                else -> MaterialTheme.colorScheme.surface
+            }
+        ),
+        border = when {
+            limitState?.isLimitExceeded == true -> androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFEF4444).copy(alpha = 0.5f))
+            limitState?.isInCooldown == true -> androidx.compose.foundation.BorderStroke(1.dp, TertiaryAmber.copy(alpha = 0.5f))
+            else -> null
+        }
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+                .padding(horizontal = 14.dp, vertical = 10.dp)
         ) {
             Row(
+                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.weight(1f)
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(
-                            if (app.isDistraction) Color(0xFFEF4444).copy(alpha = 0.15f)
-                            else SecondaryTeal.copy(alpha = 0.15f)
-                        ),
-                    contentAlignment = Alignment.Center
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.weight(1f)
                 ) {
-                    Icon(
-                        imageVector = if (app.isDistraction) Icons.Default.Lock else Icons.Default.CheckCircle,
-                        contentDescription = null,
-                        tint = if (app.isDistraction) Color(0xFFEF4444) else SecondaryTeal,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = app.appName,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Text(
-                            text = app.category,
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        if (app.isDistraction) {
-                            Text(
-                                text = "• Locked",
-                                fontSize = 11.sp,
-                                color = Color(0xFFEF4444),
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                }
-            }
-
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                if (app.isDistraction) {
-                    IconButton(
-                        onClick = onTestLock,
-                        modifier = Modifier.size(32.dp)
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(
+                                when {
+                                    limitState?.isLimitExceeded == true -> Color(0xFFEF4444).copy(alpha = 0.15f)
+                                    limitState?.isInCooldown == true -> TertiaryAmber.copy(alpha = 0.15f)
+                                    app.isDistraction -> Color(0xFFEF4444).copy(alpha = 0.15f)
+                                    else -> SecondaryTeal.copy(alpha = 0.15f)
+                                }
+                            ),
+                        contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            Icons.Default.PlayCircle,
-                            contentDescription = "Test Lock Screen",
-                            tint = PrimaryIndigo,
+                            imageVector = when {
+                                limitState?.isLimitExceeded == true -> Icons.Default.HourglassDisabled
+                                limitState?.isInCooldown == true -> Icons.Default.PauseCircle
+                                app.isDistraction -> Icons.Default.Lock
+                                else -> Icons.Default.CheckCircle
+                            },
+                            contentDescription = null,
+                            tint = when {
+                                limitState?.isLimitExceeded == true -> Color(0xFFEF4444)
+                                limitState?.isInCooldown == true -> TertiaryAmber
+                                app.isDistraction -> Color(0xFFEF4444)
+                                else -> SecondaryTeal
+                            },
                             modifier = Modifier.size(18.dp)
                         )
                     }
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = app.appName,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = app.category,
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            if (app.isDistraction) {
+                                Text(
+                                    text = "• Locked",
+                                    fontSize = 11.sp,
+                                    color = Color(0xFFEF4444),
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
                 }
 
-                Switch(
-                    checked = app.isDistraction,
-                    onCheckedChange = onToggle,
-                    modifier = Modifier.testTag("app_switch_${app.packageName}")
-                )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    // Set/Edit Daily Limit Button
+                    IconButton(
+                        onClick = onOpenLimitConfig,
+                        modifier = Modifier.size(32.dp).testTag("timer_btn_${app.packageName}")
+                    ) {
+                        Icon(
+                            imageVector = if (hasLimit) Icons.Filled.Timer else Icons.Default.Timer,
+                            contentDescription = "App Timer Limit",
+                            tint = when {
+                                limitState?.isLimitExceeded == true -> Color(0xFFEF4444)
+                                limitState?.isInCooldown == true -> TertiaryAmber
+                                hasLimit -> PrimaryIndigo
+                                else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                            },
+                            modifier = Modifier.size(19.dp)
+                        )
+                    }
+
+                    if (app.isDistraction) {
+                        IconButton(
+                            onClick = onTestLock,
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.PlayCircle,
+                                contentDescription = "Test Lock Screen",
+                                tint = PrimaryIndigo,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+
+                    Switch(
+                        checked = app.isDistraction,
+                        onCheckedChange = {
+                            if (!isNuclearLockActive) {
+                                onToggle(it)
+                            } else {
+                                Toast.makeText(context, "☢️ Locked during Nuclear Mode!", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        enabled = !isNuclearLockActive,
+                        modifier = Modifier.testTag("app_switch_${app.packageName}")
+                    )
+                }
+            }
+
+            // App Limit Details row if configured
+            if (hasLimit && limitState != null) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Surface(
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth().clickable { onOpenLimitConfig() }
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (limitState.isModifyLocked) Icons.Default.Lock else Icons.Default.Schedule,
+                                    contentDescription = null,
+                                    tint = if (limitState.isLimitExceeded) Color(0xFFEF4444) else if (limitState.isInCooldown) TertiaryAmber else SecondaryTeal,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Text(
+                                    text = when {
+                                        limitState.isLimitExceeded -> "⏳ Limit Reached (${limitState.usedMinutesToday}m / ${limitState.limitMinutes}m)"
+                                        limitState.isInCooldown -> "⏸️ 2-hr Cooldown (${limitState.cooldownRemainingFormatted})"
+                                        else -> "⏱️ ${limitState.usedMinutesToday}m / ${limitState.limitMinutes}m daily limit"
+                                    },
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = when {
+                                        limitState.isLimitExceeded -> Color(0xFFEF4444)
+                                        limitState.isInCooldown -> TertiaryAmber
+                                        else -> MaterialTheme.colorScheme.onSurface
+                                    }
+                                )
+                            }
+
+                            Text(
+                                text = when {
+                                    limitState.isLimitExceeded -> "Locked till 6 AM"
+                                    limitState.isInCooldown -> "Half-time lockout"
+                                    else -> "${limitState.remainingMinutesToday}m left"
+                                },
+                                fontSize = 10.5.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+
+                        val progress = if (limitState.limitMinutes > 0) {
+                            (limitState.usedMinutesToday.toFloat() / limitState.limitMinutes.toFloat()).coerceIn(0f, 1f)
+                        } else 0f
+
+                        LinearProgressIndicator(
+                            progress = { progress },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(5.dp)
+                                .clip(RoundedCornerShape(3.dp)),
+                            color = when {
+                                limitState.isLimitExceeded -> Color(0xFFEF4444)
+                                limitState.isInCooldown -> TertiaryAmber
+                                else -> SecondaryTeal
+                            },
+                            trackColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
+                    }
+                }
             }
         }
     }

@@ -56,6 +56,11 @@ class BlockedOverlayActivity : ComponentActivity() {
         val studiedMins = intent.getIntExtra(EXTRA_STUDIED_MINS, 0)
         val isNuclear = intent.getBooleanExtra(EXTRA_IS_NUCLEAR_LOCK, false) ||
                 com.example.util.EmergencyLockManager.getInstance(this).isNuclearLockActive()
+        val isAppLimit = intent.getBooleanExtra(EXTRA_IS_APP_LIMIT, false)
+        val isCooldown = intent.getBooleanExtra(EXTRA_IS_COOLDOWN, false)
+        val limitMins = intent.getIntExtra(EXTRA_LIMIT_MINS, 0)
+        val usedMins = intent.getIntExtra(EXTRA_USED_MINS, 0)
+        val cooldownRemainingSec = intent.getLongExtra(EXTRA_COOLDOWN_REMAINING_SEC, 0L)
 
         val themeMode = StudyPreferences.getThemeMode(this)
 
@@ -66,6 +71,11 @@ class BlockedOverlayActivity : ComponentActivity() {
                     blockedReason = reason,
                     isScheduledLock = isScheduled,
                     isNuclearLock = isNuclear,
+                    isAppLimitLock = isAppLimit,
+                    isCooldownLock = isCooldown,
+                    appLimitMins = limitMins,
+                    appUsedMins = usedMins,
+                    initialCooldownRemainingSec = cooldownRemainingSec,
                     ruleName = ruleName,
                     remainingStudyMins = remainingStudyMins,
                     requiredStudyMins = requiredStudyMins,
@@ -102,6 +112,11 @@ class BlockedOverlayActivity : ComponentActivity() {
         const val EXTRA_REMAINING_STUDY_MINS = "extra_remaining_study_mins"
         const val EXTRA_REQUIRED_STUDY_MINS = "extra_required_study_mins"
         const val EXTRA_STUDIED_MINS = "extra_studied_mins"
+        const val EXTRA_IS_APP_LIMIT = "extra_is_app_limit"
+        const val EXTRA_IS_COOLDOWN = "extra_is_cooldown"
+        const val EXTRA_LIMIT_MINS = "extra_limit_mins"
+        const val EXTRA_USED_MINS = "extra_used_mins"
+        const val EXTRA_COOLDOWN_REMAINING_SEC = "extra_cooldown_remaining_sec"
     }
 }
 
@@ -111,6 +126,11 @@ fun BlockedScreenContent(
     blockedReason: String,
     isScheduledLock: Boolean,
     isNuclearLock: Boolean = false,
+    isAppLimitLock: Boolean = false,
+    isCooldownLock: Boolean = false,
+    appLimitMins: Int = 0,
+    appUsedMins: Int = 0,
+    initialCooldownRemainingSec: Long = 0L,
     ruleName: String,
     remainingStudyMins: Int,
     requiredStudyMins: Int,
@@ -121,22 +141,29 @@ fun BlockedScreenContent(
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var remainingSeconds by remember { mutableStateOf(0L) }
+    var cooldownSec by remember(initialCooldownRemainingSec) { mutableStateOf(initialCooldownRemainingSec) }
     val subject = remember { StudyPreferences.getSessionSubject(context) }
     var showEmergencyDialog by remember { mutableStateOf(false) }
 
-    // Live countdown updater for active timer session
-    LaunchedEffect(isScheduledLock, isNuclearLock) {
+    // Live countdown updater for active timer session or cooldown
+    LaunchedEffect(isScheduledLock, isNuclearLock, isCooldownLock) {
         while (true) {
-            val left = if (isNuclearLock) {
-                com.example.util.EmergencyLockManager.getInstance(context).checkStatus().remainingSeconds
-            } else if (!isScheduledLock) {
-                val endTime = StudyPreferences.getSessionEndTime(context)
-                val now = System.currentTimeMillis()
-                (endTime - now) / 1000L
-            } else 0L
+            if (isCooldownLock) {
+                if (cooldownSec > 0) {
+                    cooldownSec--
+                }
+            } else {
+                val left = if (isNuclearLock) {
+                    com.example.util.EmergencyLockManager.getInstance(context).checkStatus().remainingSeconds
+                } else if (!isScheduledLock && !isAppLimitLock) {
+                    val endTime = StudyPreferences.getSessionEndTime(context)
+                    val now = System.currentTimeMillis()
+                    (endTime - now) / 1000L
+                } else 0L
 
-            remainingSeconds = left.coerceAtLeast(0L)
-            if (!isScheduledLock && !isNuclearLock && left <= 0) break
+                remainingSeconds = left.coerceAtLeast(0L)
+                if (!isScheduledLock && !isNuclearLock && !isAppLimitLock && left <= 0) break
+            }
             delay(1000L)
         }
     }
@@ -144,6 +171,15 @@ fun BlockedScreenContent(
     val minutes = remainingSeconds / 60
     val seconds = remainingSeconds % 60
     val formattedTime = String.format("%02d:%02d", minutes, seconds)
+
+    val cdH = cooldownSec / 3600
+    val cdM = (cooldownSec % 3600) / 60
+    val cdS = cooldownSec % 60
+    val formattedCooldown = if (cdH > 0) {
+        String.format("%02d:%02d:%02d", cdH, cdM, cdS)
+    } else {
+        String.format("%02d:%02d", cdM, cdS)
+    }
 
     val quotes = remember {
         listOf(
@@ -234,7 +270,121 @@ fun BlockedScreenContent(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            if (isScheduledLock) {
+            if (isCooldownLock) {
+                // 2-Hour Half-Time Cooldown Card
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color(0xFF1E1B4B)
+                    ),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, TertiaryAmber.copy(alpha = 0.5f))
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Surface(
+                            color = TertiaryAmber.copy(alpha = 0.2f),
+                            shape = CircleShape
+                        ) {
+                            Text(
+                                text = "⏸️ HALF-TIME FOCUS COOLDOWN",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Black,
+                                color = TertiaryAmber,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+                                letterSpacing = 1.1.sp
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        Text(
+                            text = formattedCooldown,
+                            fontSize = 44.sp,
+                            fontWeight = FontWeight.Black,
+                            color = TertiaryAmber
+                        )
+
+                        Text(
+                            text = "Cooldown time remaining",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF94A3B8)
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Text(
+                            text = "You reached ${appUsedMins}m of your ${appLimitMins}m daily limit.\nTo prevent compulsive scrolling, this app is locked for a 2-hour cooldown before you can use the remaining ${appLimitMins - appUsedMins} minutes.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            color = Color.White,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = 8.dp)
+                        )
+                    }
+                }
+            } else if (isAppLimitLock) {
+                // Daily App Limit Exceeded Card
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color(0xFF450A0A).copy(alpha = 0.8f)
+                    ),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFEF4444).copy(alpha = 0.6f))
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Surface(
+                            color = Color(0xFFEF4444).copy(alpha = 0.25f),
+                            shape = CircleShape
+                        ) {
+                            Text(
+                                text = "⏳ DAILY APP LIMIT EXHAUSTED",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Black,
+                                color = Color(0xFFFCA5A5),
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+                                letterSpacing = 1.1.sp
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        Text(
+                            text = "${appUsedMins}m / ${appLimitMins}m",
+                            fontSize = 40.sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color(0xFFFCA5A5)
+                        )
+
+                        Text(
+                            text = "All daily allowance used today",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFFCBD5E1)
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Text(
+                            text = "Locked until tomorrow morning (6:00 AM).\nTo protect your discipline, timer limits cannot be bypassed or modified until the next day.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = 8.dp)
+                        )
+                    }
+                }
+            } else if (isScheduledLock) {
                 // Scheduled Auto-Lock Card: "First study for X hours/minutes, then app will unlock"
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -431,8 +581,13 @@ fun BlockedScreenContent(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Emergency Unlock option (Disabled in Nuclear Lockout)
-            if (isNuclearLock) {
+            // Emergency Unlock option (Disabled in Nuclear, Cooldown, or Daily App Limit Lockout)
+            if (isNuclearLock || isCooldownLock || isAppLimitLock) {
+                val lockNotice = when {
+                    isNuclearLock -> "☢️ Nuclear Lockout: Emergency pass disabled"
+                    isCooldownLock -> "⏸️ Focus Cooldown Active: Locked until break period finishes"
+                    else -> "⏳ Daily Limit Reached: Locked until tomorrow morning (6:00 AM)"
+                }
                 Surface(
                     color = Color(0xFF450A0A),
                     shape = RoundedCornerShape(12.dp),
@@ -447,10 +602,11 @@ fun BlockedScreenContent(
                         Icon(Icons.Default.Lock, contentDescription = null, tint = Color(0xFFFCA5A5), modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "☢️ Nuclear Lockout: Emergency pass disabled",
+                            text = lockNotice,
                             color = Color(0xFFFCA5A5),
                             fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp
+                            fontSize = 12.sp,
+                            textAlign = TextAlign.Center
                         )
                     }
                 }

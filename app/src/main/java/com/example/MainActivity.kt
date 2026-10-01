@@ -123,6 +123,7 @@ fun MainAppContent(viewModel: StudyViewModel, initialShowReminders: Boolean = fa
     val remindersList by viewModel.remindersList.collectAsStateWithLifecycle()
     val marathonState by viewModel.marathonState.collectAsStateWithLifecycle()
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
+    val appLimitsMap by viewModel.appLimitsMap.collectAsStateWithLifecycle()
     val autoLockRules by viewModel.autoLockRules.collectAsStateWithLifecycle()
     val activeAutoLockStatus by viewModel.activeAutoLockStatus.collectAsStateWithLifecycle()
     val aiCoachResponse by viewModel.aiCoachResponse.collectAsStateWithLifecycle()
@@ -700,6 +701,16 @@ fun MainAppContent(viewModel: StudyViewModel, initialShowReminders: Boolean = fa
                                 allApps = allApps,
                                 autoLockRules = autoLockRules,
                                 activeAutoLockStatus = activeAutoLockStatus,
+                                appLimitsMap = appLimitsMap,
+                                onSetAppLimit = { pkg, mins ->
+                                    viewModel.setAppLimit(pkg, mins)
+                                },
+                                onRemoveAppLimit = { pkg ->
+                                    viewModel.removeAppLimit(pkg)
+                                },
+                                canModifyAppLimit = { pkg ->
+                                    viewModel.canModifyAppLimit(pkg)
+                                },
                                 initialSubTab = locksSelectedSubTab,
                                 onToggleYouTubeShorts = { enabled ->
                                     viewModel.toggleYouTubeShortsBlocking(enabled)

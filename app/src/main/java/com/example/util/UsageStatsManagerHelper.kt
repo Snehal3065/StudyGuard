@@ -107,6 +107,32 @@ object UsageStatsManagerHelper {
         return list.sortedByDescending { it.totalTimeInForegroundMs }
     }
 
+    fun getTodayPackageUsageMs(context: Context, packageName: String): Long {
+        if (!hasUsageStatsPermission(context)) {
+            return 0L
+        }
+        val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager
+            ?: return 0L
+
+        val calendar = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val startTime = calendar.timeInMillis
+        val endTime = System.currentTimeMillis()
+
+        val stats: List<UsageStats> = usageStatsManager.queryUsageStats(
+            UsageStatsManager.INTERVAL_DAILY,
+            startTime,
+            endTime
+        ) ?: emptyList()
+
+        val target = stats.find { it.packageName == packageName }
+        return target?.totalTimeInForeground ?: 0L
+    }
+
     fun getTodayTotalScreenTimeMs(context: Context): Long {
         return getTodayAppUsageList(context).sumOf { it.totalTimeInForegroundMs }
     }
