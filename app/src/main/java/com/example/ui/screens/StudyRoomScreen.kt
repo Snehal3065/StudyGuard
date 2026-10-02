@@ -37,11 +37,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.ui.StudyUiState
+import com.example.ui.components.NotificationShieldReportDialog
+import com.example.ui.components.NotificationShieldStatusCard
 import com.example.ui.theme.PrimaryIndigo
 import com.example.ui.theme.PrimaryIndigoLight
 import com.example.ui.theme.SecondaryTeal
 import com.example.ui.theme.TertiaryAmber
 import com.example.util.MarathonConfig
+import com.example.util.MarathonPhase
 import com.example.util.MarathonState
 
 @Composable
@@ -60,12 +63,27 @@ fun StudyRoomScreen(
     onToggleFloatingWidget: (Boolean) -> Unit,
     onNavigateToPermissions: () -> Unit,
     onActivateNuclearLock: (Int) -> Unit = {},
+    onActivateNuclearMarathon: (MarathonConfig) -> Unit = {},
+    onOpenNotificationSettings: () -> Unit = {},
+    onViewNotificationReport: () -> Unit = {},
+    onDismissNotificationReport: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     var subjectInput by remember { mutableStateOf("Calculus & Physics") }
     var selectedMinutes by remember { mutableStateOf(25) }
     var nuclearMinutes by remember { mutableStateOf(30) }
+    var isNuclearMarathonSelected by remember { mutableStateOf(false) }
+    var selectedNuclearMarathonConfig by remember {
+        mutableStateOf(
+            MarathonConfig(
+                title = "Nuclear Focus Marathon",
+                studyDurationMinutes = 45,
+                breakDurationMinutes = 15,
+                totalCycles = 4
+            )
+        )
+    }
     var customMinutesInput by remember { mutableStateOf("") }
     var showCustomDialog by remember { mutableStateOf(false) }
     var showNuclearWarningDialog by remember { mutableStateOf(false) }
@@ -315,7 +333,15 @@ fun StudyRoomScreen(
 
             studyModeTab == 2 -> {
                 // Total Lockout Mode (Strict Nuclear Lock)
-                if (uiState.isStudyActive) {
+                if (marathonState.isActive && marathonState.isNuclear) {
+                    ActiveMarathonCard(
+                        marathonState = marathonState,
+                        onPause = onPauseMarathon,
+                        onResume = onResumeMarathon,
+                        onSkipBreak = onSkipMarathonBreak,
+                        onStop = onStopMarathon
+                    )
+                } else if (uiState.isStudyActive) {
                     ActiveSessionCard(
                         uiState = uiState,
                         onStopSession = onStopSession
@@ -326,6 +352,10 @@ fun StudyRoomScreen(
                         presetDurations = nuclearPresetDurations,
                         onSelectDuration = { nuclearMinutes = it },
                         onCustomDurationClick = { showCustomDialog = true },
+                        isMarathonSelected = isNuclearMarathonSelected,
+                        onToggleMarathonSelected = { isNuclearMarathonSelected = it },
+                        selectedMarathonConfig = selectedNuclearMarathonConfig,
+                        onSelectMarathonConfig = { selectedNuclearMarathonConfig = it },
                         onStartNuclearLockout = { showNuclearWarningDialog = true }
                     )
                 }
@@ -354,6 +384,14 @@ fun StudyRoomScreen(
                 }
             }
         }
+
+        // Distraction Notification Interception Shield Status Card
+        NotificationShieldStatusCard(
+            isNotificationAccessGranted = uiState.isNotificationAccessEnabled,
+            blockedNotificationsCount = uiState.currentSessionBlockedNotifications,
+            onGrantAccessClick = onOpenNotificationSettings,
+            onViewReportClick = onViewNotificationReport
+        )
 
         // Accessibility & Floating Focus Overlay Widget Controller Card
         AccessibilityWidgetControlCard(
@@ -427,7 +465,7 @@ fun StudyRoomScreen(
             },
             title = {
                 Text(
-                    text = "TOTAL PHONE LOCKOUT WARNING",
+                    text = if (isNuclearMarathonSelected) "NUCLEAR MARATHON WARNING" else "TOTAL PHONE LOCKOUT WARNING",
                     fontWeight = FontWeight.Black,
                     fontSize = 17.sp,
                     color = Color(0xFFDC2626),
@@ -439,24 +477,38 @@ fun StudyRoomScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(
-                        text = "For the next $nuclearMinutes minutes, your phone is TOTALLY LOCKED to study mode.",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp
-                    )
-                    Text(
-                        text = "• Distracted apps (YouTube Shorts, Social Media, Games) are 100% blocked.\n• System Settings & app uninstallation are locked.\n• You will NOT be able to close, cancel, or stop this session at all until the timer finishes!",
-                        fontSize = 13.sp,
-                        lineHeight = 18.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    if (isNuclearMarathonSelected) {
+                        Text(
+                            text = "You are starting an unbreakable ${selectedNuclearMarathonConfig.totalHoursFormatted} Nuclear Marathon (${selectedNuclearMarathonConfig.totalCycles} cycles of ${selectedNuclearMarathonConfig.studyDurationMinutes}m focus & ${selectedNuclearMarathonConfig.breakDurationMinutes}m break).",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
+                        )
+                        Text(
+                            text = "• During Focus: Distraction apps & notifications are 100% blocked.\n• During Breaks: Distraction apps unlock for rest, BUT you CANNOT change any settings, cannot remove locked apps, and cannot alter timers.\n• Once started, there is NO WAY to cancel, pause, or end it early!",
+                            fontSize = 13.sp,
+                            lineHeight = 18.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        Text(
+                            text = "For the next $nuclearMinutes minutes, your phone is TOTALLY LOCKED to study mode.",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
+                        )
+                        Text(
+                            text = "• Distracted apps (YouTube Shorts, Social Media, Games) are 100% blocked.\n• System Settings & app uninstallation are locked.\n• You will NOT be able to close, cancel, or stop this session at all until the timer finishes!",
+                            fontSize = 13.sp,
+                            lineHeight = 18.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                     Surface(
                         color = Color(0xFF450A0A),
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
-                            text = "⛔ Once you click Continue, there is NO WAY to stop it.",
+                            text = "⛔ Once you click Continue, there is NO WAY to bypass or stop it early.",
                             color = Color(0xFFFCA5A5),
                             fontWeight = FontWeight.Black,
                             fontSize = 12.sp,
@@ -470,13 +522,20 @@ fun StudyRoomScreen(
                 Button(
                     onClick = {
                         showNuclearWarningDialog = false
-                        onActivateNuclearLock(nuclearMinutes)
+                        if (isNuclearMarathonSelected) {
+                            onActivateNuclearMarathon(selectedNuclearMarathonConfig)
+                        } else {
+                            onActivateNuclearLock(nuclearMinutes)
+                        }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.testTag("confirm_nuclear_lock_button")
                 ) {
-                    Text("Continue — Lock Me Out! ☢️", fontWeight = FontWeight.Black)
+                    Text(
+                        if (isNuclearMarathonSelected) "Start Nuclear Marathon! ☢️" else "Continue — Lock Me Out! ☢️",
+                        fontWeight = FontWeight.Black
+                    )
                 }
             },
             dismissButton = {
@@ -487,6 +546,13 @@ fun StudyRoomScreen(
                     Text("Cancel / Go Back", fontWeight = FontWeight.Bold)
                 }
             }
+        )
+    }
+
+    if (uiState.showNotificationReportDialog) {
+        NotificationShieldReportDialog(
+            report = uiState.latestNotificationReport,
+            onDismiss = onDismissNotificationReport
         )
     }
 }
@@ -950,10 +1016,21 @@ fun NuclearTotalLockoutSetupCard(
     presetDurations: List<Int>,
     onSelectDuration: (Int) -> Unit,
     onCustomDurationClick: () -> Unit,
+    isMarathonSelected: Boolean,
+    onToggleMarathonSelected: (Boolean) -> Unit,
+    selectedMarathonConfig: MarathonConfig,
+    onSelectMarathonConfig: (MarathonConfig) -> Unit,
     onStartNuclearLockout: () -> Unit
 ) {
+    val marathonPresets = listOf(
+        MarathonConfig("Deep Focus Marathon", 45, 15, 4),
+        MarathonConfig("Classic Pomodoro", 25, 5, 4),
+        MarathonConfig("Heavy Grind Marathon", 50, 10, 3),
+        MarathonConfig("Exam Crunch Marathon", 60, 15, 4)
+    )
+
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().testTag("nuclear_lockout_card"),
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(
             containerColor = Color(0xFF1E1B4B)
@@ -989,7 +1066,7 @@ fun NuclearTotalLockoutSetupCard(
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Text(
-                            text = "Nuclear Total Lockout",
+                            text = if (isMarathonSelected) "Nuclear Marathon Mode" else "Nuclear Sprint Lockout",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Black,
                             color = Color.White
@@ -1008,9 +1085,50 @@ fun NuclearTotalLockoutSetupCard(
                         }
                     }
                     Text(
-                        text = "Unbreakable commitment. No early stopping.",
+                        text = if (isMarathonSelected) "Focus cycles + breaks with frozen settings" else "Unbreakable single session. No early stopping.",
                         style = MaterialTheme.typography.bodySmall,
                         color = Color(0xFFCBD5E1)
+                    )
+                }
+            }
+
+            // Mode Selector: One-Way Sprint vs Nuclear Marathon
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFF0F172A), RoundedCornerShape(12.dp))
+                    .padding(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Surface(
+                    onClick = { onToggleMarathonSelected(false) },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(10.dp),
+                    color = if (!isMarathonSelected) Color(0xFFDC2626) else Color.Transparent
+                ) {
+                    Text(
+                        text = "⚡ Sprint Lock",
+                        modifier = Modifier.padding(vertical = 8.dp),
+                        textAlign = TextAlign.Center,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        color = if (!isMarathonSelected) Color.White else Color(0xFF94A3B8)
+                    )
+                }
+
+                Surface(
+                    onClick = { onToggleMarathonSelected(true) },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(10.dp),
+                    color = if (isMarathonSelected) Color(0xFF6366F1) else Color.Transparent
+                ) {
+                    Text(
+                        text = "🔄 Nuclear Marathon",
+                        modifier = Modifier.padding(vertical = 8.dp),
+                        textAlign = TextAlign.Center,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        color = if (isMarathonSelected) Color.White else Color(0xFF94A3B8)
                     )
                 }
             }
@@ -1028,7 +1146,10 @@ fun NuclearTotalLockoutSetupCard(
                 ) {
                     Text("⚠️", fontSize = 18.sp)
                     Text(
-                        text = "Selecting this mode will completely lock your phone from distraction apps. You will NOT be able to close, cancel, or stop it early!",
+                        text = if (isMarathonSelected)
+                            "Nuclear Marathon cycles between focus and break times. During breaks, distraction apps open for rest, BUT settings and app lock lists remain strictly frozen so you cannot bypass rules!"
+                        else
+                            "Selecting this mode completely locks distraction apps and notifications. You will NOT be able to cancel, stop, or edit blocked apps until time expires!",
                         color = Color(0xFFFCA5A5),
                         fontSize = 12.sp,
                         lineHeight = 16.sp,
@@ -1037,45 +1158,109 @@ fun NuclearTotalLockoutSetupCard(
                 }
             }
 
-            // Duration Selector
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    text = "SELECT LOCKOUT DURATION",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF94A3B8),
-                    letterSpacing = 0.5.sp
-                )
+            if (!isMarathonSelected) {
+                // Sprint Duration Selector
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "SELECT SPRINT LOCKOUT DURATION",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF94A3B8),
+                        letterSpacing = 0.5.sp
+                    )
 
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(presetDurations) { duration ->
-                        FilterChip(
-                            selected = selectedMinutes == duration,
-                            onClick = { onSelectDuration(duration) },
-                            label = { Text("${duration}m", fontWeight = FontWeight.Bold) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = Color(0xFFDC2626),
-                                selectedLabelColor = Color.White
-                            ),
-                            shape = RoundedCornerShape(10.dp)
-                        )
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(presetDurations) { duration ->
+                            FilterChip(
+                                selected = selectedMinutes == duration,
+                                onClick = { onSelectDuration(duration) },
+                                label = { Text("${duration}m", fontWeight = FontWeight.Bold) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = Color(0xFFDC2626),
+                                    selectedLabelColor = Color.White
+                                ),
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                        }
+                        item {
+                            FilterChip(
+                                selected = !presetDurations.contains(selectedMinutes),
+                                onClick = onCustomDurationClick,
+                                label = {
+                                    Text(
+                                        if (!presetDurations.contains(selectedMinutes)) "${selectedMinutes}m" else "Custom",
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = Color(0xFFDC2626),
+                                    selectedLabelColor = Color.White
+                                ),
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                        }
                     }
-                    item {
-                        FilterChip(
-                            selected = !presetDurations.contains(selectedMinutes),
-                            onClick = onCustomDurationClick,
-                            label = {
-                                Text(
-                                    if (!presetDurations.contains(selectedMinutes)) "${selectedMinutes}m" else "Custom",
-                                    fontWeight = FontWeight.Bold
-                                )
-                            },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = Color(0xFFDC2626),
-                                selectedLabelColor = Color.White
-                            ),
-                            shape = RoundedCornerShape(10.dp)
-                        )
+                }
+            } else {
+                // Nuclear Marathon Presets
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "SELECT NUCLEAR MARATHON PRESET",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF94A3B8),
+                        letterSpacing = 0.5.sp
+                    )
+
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        marathonPresets.forEach { config ->
+                            val isSelected = selectedMarathonConfig.studyDurationMinutes == config.studyDurationMinutes &&
+                                    selectedMarathonConfig.breakDurationMinutes == config.breakDurationMinutes &&
+                                    selectedMarathonConfig.totalCycles == config.totalCycles
+
+                            Surface(
+                                onClick = { onSelectMarathonConfig(config) },
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (isSelected) Color(0xFF312E81) else Color(0xFF0F172A),
+                                border = androidx.compose.foundation.BorderStroke(
+                                    1.5.dp,
+                                    if (isSelected) Color(0xFF818CF8) else Color.White.copy(alpha = 0.1f)
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column {
+                                        Text(
+                                            text = config.title,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.5.sp,
+                                            color = Color.White
+                                        )
+                                        Text(
+                                            text = "${config.studyDurationMinutes}m study • ${config.breakDurationMinutes}m break • ${config.totalCycles} cycles",
+                                            fontSize = 11.5.sp,
+                                            color = Color(0xFF94A3B8)
+                                        )
+                                    }
+                                    Surface(
+                                        color = if (isSelected) Color(0xFF818CF8) else Color.White.copy(alpha = 0.1f),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Text(
+                                            text = config.totalHoursFormatted,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Black,
+                                            color = if (isSelected) Color(0xFF0F172A) else Color.White,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -1089,15 +1274,18 @@ fun NuclearTotalLockoutSetupCard(
                     .testTag("start_nuclear_lockout_button"),
                 shape = RoundedCornerShape(14.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFFDC2626)
+                    containerColor = if (isMarathonSelected) Color(0xFF4F46E5) else Color(0xFFDC2626)
                 ),
                 elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp)
             ) {
                 Icon(Icons.Filled.Warning, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "Engage Total Lockout (${selectedMinutes} min) ☢️",
-                    fontSize = 15.sp,
+                    text = if (isMarathonSelected)
+                        "Engage Nuclear Marathon (${selectedMarathonConfig.totalHoursFormatted}) ☢️"
+                    else
+                        "Engage Sprint Lockout (${selectedMinutes} min) ☢️",
+                    fontSize = 14.5.sp,
                     fontWeight = FontWeight.Black
                 )
             }

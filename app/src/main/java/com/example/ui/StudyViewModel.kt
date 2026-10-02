@@ -59,6 +59,7 @@ data class StudyUiState(
     val isDeviceAdminEnabled: Boolean = false,
     val isUsageStatsEnabled: Boolean = false,
     val isOverlayEnabled: Boolean = false,
+    val isNotificationAccessEnabled: Boolean = false,
     val isFloatingWidgetActive: Boolean = false,
     val isYouTubeShortsBlocked: Boolean = true,
     val isStrictUninstallLockEnabled: Boolean = true,
@@ -69,8 +70,13 @@ data class StudyUiState(
     val usageStatsList: List<AppUsageInfo> = emptyList(),
     val currentThemeMode: StudyPreferences.ThemeMode = StudyPreferences.ThemeMode.SYSTEM,
     val isNuclearLockActive: Boolean = false,
+    val isNuclearMarathonActive: Boolean = false,
+    val isNuclearMarathonBreak: Boolean = false,
     val nuclearRemainingSeconds: Long = 0L,
     val nuclearFormattedRemaining: String = "00:00",
+    val currentSessionBlockedNotifications: Int = 0,
+    val showNotificationReportDialog: Boolean = false,
+    val latestNotificationReport: com.example.util.NotificationShieldReport? = null,
     val showCelebrationConfetti: Boolean = false
 )
 
@@ -82,6 +88,20 @@ class StudyViewModel(
     private val emergencyLockManager = com.example.util.EmergencyLockManager.getInstance(context)
     private val appLimitManager = com.example.util.AppLimitManager.getInstance(context)
     val appLimitsMap: StateFlow<Map<String, com.example.util.AppLimitItemState>> = appLimitManager.limitsFlow
+    val notificationBlockReportManager = com.example.util.NotificationBlockReportManager.getInstance(context)
+    val lastNotificationReport: StateFlow<com.example.util.NotificationShieldReport?> = notificationBlockReportManager.lastReportFlow
+
+    fun dismissNotificationReportDialog() {
+        _uiState.value = _uiState.value.copy(showNotificationReportDialog = false)
+    }
+
+    fun showNotificationReportDialog() {
+        _uiState.value = _uiState.value.copy(showNotificationReportDialog = true)
+    }
+
+    fun openNotificationSettings() {
+        com.example.util.NotificationBlockReportManager.openNotificationAccessSettings(context)
+    }
 
     private fun showToast(msg: String) {
         viewModelScope.launch(Dispatchers.Main) {
@@ -182,6 +202,16 @@ class StudyViewModel(
         if (StudyPreferences.hasActiveSessionExpired(context)) {
             completeCurrentSession()
         }
+        viewModelScope.launch {
+            notificationBlockReportManager.currentSessionBlockedCount.collect { count ->
+                _uiState.value = _uiState.value.copy(currentSessionBlockedNotifications = count)
+            }
+        }
+        viewModelScope.launch {
+            notificationBlockReportManager.lastReportFlow.collect { report ->
+                _uiState.value = _uiState.value.copy(latestNotificationReport = report)
+            }
+        }
         startLocalTimerLoop()
         checkPermissions(context)
         refreshUsageStats()
@@ -213,10 +243,19 @@ class StudyViewModel(
         refreshNuclearLock()
     }
 
+    fun activateNuclearMarathon(config: MarathonConfig) {
+        emergencyLockManager.activateNuclearMarathon(config)
+        toggleStrictUninstallLock(true)
+        startMarathon(config, isNuclear = true)
+        refreshNuclearLock()
+    }
+
     fun refreshNuclearLock() {
         val status = emergencyLockManager.checkStatus()
         _uiState.value = _uiState.value.copy(
             isNuclearLockActive = status.isActive,
+            isNuclearMarathonActive = status.isMarathon,
+            isNuclearMarathonBreak = status.isBreakPhase,
             nuclearRemainingSeconds = status.remainingSeconds,
             nuclearFormattedRemaining = status.formattedRemaining
         )
@@ -303,9 +342,12 @@ class StudyViewModel(
             repository.completeSession(sessionId, actualMinutes, distractionsIntercepted = 0)
             StudyPreferences.stopStudySession(context)
             StudyFocusService.stop(context)
+            val report = notificationBlockReportManager.finishSession()
             _uiState.value = _uiState.value.copy(
                 isStudyActive = false,
-                remainingSeconds = 0L
+                remainingSeconds = 0L,
+                latestNotificationReport = report,
+                showNotificationReportDialog = (report != null && report.totalBlockedCount > 0)
             )
             StudyGuardAppWidget.updateAllWidgets(context)
         }
@@ -321,12 +363,14 @@ class StudyViewModel(
         val overlayGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             Settings.canDrawOverlays(ctx)
         } else true
+        val notificationAccessGranted = com.example.util.NotificationBlockReportManager.isNotificationAccessGranted(ctx)
 
         _uiState.value = _uiState.value.copy(
             isDeviceAdminEnabled = isAdminActive,
             isAccessibilityEnabled = accessibilityEnabled,
             isUsageStatsEnabled = usageStatsGranted,
-            isOverlayEnabled = overlayGranted
+            isOverlayEnabled = overlayGranted,
+            isNotificationAccessEnabled = notificationAccessGranted
         )
 
         refreshUsageStats()
@@ -376,6 +420,7 @@ class StudyViewModel(
             val sub = subject.ifBlank { "Deep Study Session" }
             repository.startSession(sub, minutes)
             StudyFocusService.start(context)
+            notificationBlockReportManager.startSession(sub)
             _uiState.value = _uiState.value.copy(
                 isStudyActive = true,
                 currentSubject = sub,
@@ -388,6 +433,7 @@ class StudyViewModel(
 
     fun stopSession() {
         if (_uiState.value.isNuclearLockActive) {
+            showToast("☢️ Nuclear Lock is active! You cannot stop or cancel this session.")
             return
         }
         viewModelScope.launch {
@@ -400,9 +446,12 @@ class StudyViewModel(
             repository.completeSession(sessionId, actualMinutes, 0)
             StudyPreferences.stopStudySession(context)
             StudyFocusService.stop(context)
+            val report = notificationBlockReportManager.finishSession()
             _uiState.value = _uiState.value.copy(
                 isStudyActive = false,
-                remainingSeconds = 0L
+                remainingSeconds = 0L,
+                latestNotificationReport = report,
+                showNotificationReportDialog = (report != null && report.totalBlockedCount > 0)
             )
             StudyGuardAppWidget.updateAllWidgets(context)
         }
@@ -729,11 +778,12 @@ class StudyViewModel(
     }
 
     // Long Study Hours Marathon Engine (e.g. 45 min study / 15 min break x 4 cycles)
-    fun startMarathon(config: MarathonConfig) {
+    fun startMarathon(config: MarathonConfig, isNuclear: Boolean = false) {
         marathonJob?.cancel()
         _marathonState.value = MarathonState(
             isActive = true,
             isPaused = false,
+            isNuclear = isNuclear,
             config = config,
             currentCycle = 1,
             currentPhase = MarathonPhase.STUDY,
@@ -741,6 +791,15 @@ class StudyViewModel(
             totalRemainingSeconds = config.totalMinutes * 60L,
             completedStudyMinutes = 0
         )
+
+        if (isNuclear) {
+            emergencyLockManager.activateNuclearMarathon(config)
+            _uiState.value = _uiState.value.copy(
+                isNuclearLockActive = true,
+                isNuclearMarathonActive = true,
+                isNuclearMarathonBreak = false
+            )
+        }
 
         // Arm shields and start focus service for study cycle 1
         startSession("${config.title} (Cycle 1)", config.studyDurationMinutes)
@@ -762,6 +821,14 @@ class StudyViewModel(
                             completeCurrentSession()
                             if (current.currentCycle >= current.config.totalCycles) {
                                 // Marathon complete!
+                                if (current.isNuclear) {
+                                    emergencyLockManager.completeNuclearMarathon()
+                                    _uiState.value = _uiState.value.copy(
+                                        isNuclearLockActive = false,
+                                        isNuclearMarathonActive = false,
+                                        isNuclearMarathonBreak = false
+                                    )
+                                }
                                 _marathonState.value = current.copy(
                                     isActive = false,
                                     currentPhase = MarathonPhase.COMPLETED,
@@ -769,23 +836,45 @@ class StudyViewModel(
                                     totalRemainingSeconds = 0,
                                     completedStudyMinutes = newCompleted
                                 )
+                                showToast("🏆 Focus Marathon Complete! Amazing perseverance!")
                                 break
                             } else {
                                 // Transition to break
+                                if (current.isNuclear) {
+                                    emergencyLockManager.setMarathonPhase(
+                                        isBreak = true,
+                                        cycle = current.currentCycle,
+                                        phaseDurationMins = current.config.breakDurationMinutes
+                                    )
+                                    _uiState.value = _uiState.value.copy(
+                                        isNuclearMarathonBreak = true
+                                    )
+                                }
                                 _marathonState.value = current.copy(
                                     currentPhase = MarathonPhase.BREAK,
                                     phaseRemainingSeconds = current.config.breakDurationMinutes * 60L,
                                     totalRemainingSeconds = newTotalSeconds,
                                     completedStudyMinutes = newCompleted
                                 )
-                                // Temporarily relax locks during break
+                                // Temporarily relax study lock flag during break
                                 StudyPreferences.setStudyActive(context, false)
                                 _uiState.value = _uiState.value.copy(isStudyActive = false)
                                 StudyGuardAppWidget.updateAllWidgets(context)
+                                showToast("☕ Focus Cycle ${current.currentCycle} Done! Enjoy your break. Settings & blocked apps remain frozen.")
                             }
                         }
                         MarathonPhase.BREAK -> {
                             val nextCycle = current.currentCycle + 1
+                            if (current.isNuclear) {
+                                emergencyLockManager.setMarathonPhase(
+                                    isBreak = false,
+                                    cycle = nextCycle,
+                                    phaseDurationMins = current.config.studyDurationMinutes
+                                )
+                                _uiState.value = _uiState.value.copy(
+                                    isNuclearMarathonBreak = false
+                                )
+                            }
                             _marathonState.value = current.copy(
                                 currentCycle = nextCycle,
                                 currentPhase = MarathonPhase.STUDY,
@@ -794,6 +883,7 @@ class StudyViewModel(
                             )
                             // Re-arm locks for next cycle
                             startSession("${current.config.title} (Cycle $nextCycle)", current.config.studyDurationMinutes)
+                            showToast("🔔 Break Over! Cycle $nextCycle focus starting now.")
                         }
                         else -> break
                     }
@@ -808,6 +898,10 @@ class StudyViewModel(
     }
 
     fun pauseMarathon() {
+        if (_marathonState.value.isNuclear || emergencyLockManager.isNuclearLockActive()) {
+            showToast("☢️ Nuclear Marathon is strictly locked! Pausing is prohibited.")
+            return
+        }
         _marathonState.value = _marathonState.value.copy(isPaused = true)
     }
 
@@ -819,16 +913,31 @@ class StudyViewModel(
         val current = _marathonState.value
         if (current.isActive && current.currentPhase == MarathonPhase.BREAK) {
             val nextCycle = current.currentCycle + 1
+            if (current.isNuclear) {
+                emergencyLockManager.setMarathonPhase(
+                    isBreak = false,
+                    cycle = nextCycle,
+                    phaseDurationMins = current.config.studyDurationMinutes
+                )
+                _uiState.value = _uiState.value.copy(
+                    isNuclearMarathonBreak = false
+                )
+            }
             _marathonState.value = current.copy(
                 currentCycle = nextCycle,
                 currentPhase = MarathonPhase.STUDY,
                 phaseRemainingSeconds = current.config.studyDurationMinutes * 60L
             )
             startSession("${current.config.title} (Cycle $nextCycle)", current.config.studyDurationMinutes)
+            showToast("🚀 Skipped break! Resumed Cycle $nextCycle.")
         }
     }
 
     fun stopMarathon() {
+        if (_marathonState.value.isNuclear || emergencyLockManager.isNuclearLockActive()) {
+            showToast("☢️ Nuclear Marathon is strictly locked! Cannot stop until all cycles are completed.")
+            return
+        }
         marathonJob?.cancel()
         marathonJob = null
         _marathonState.value = _marathonState.value.copy(isActive = false, currentPhase = MarathonPhase.IDLE)

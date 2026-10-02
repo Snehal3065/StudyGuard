@@ -34,8 +34,10 @@ class FocusAccessibilityService : AccessibilityService() {
         if (event == null) return
 
         val context = applicationContext
-        val isNuclearActive = EmergencyLockManager.getInstance(context).isNuclearLockActive()
-        val isStudyActive = StudyPreferences.isStudyActive(context) || isNuclearActive
+        val emergencyLock = EmergencyLockManager.getInstance(context)
+        val isNuclearLockActive = emergencyLock.isNuclearLockActive()
+        val isNuclearBlockActive = emergencyLock.isNuclearBlockAppsActive()
+        val isStudyActive = StudyPreferences.isStudyActive(context) || isNuclearBlockActive
         val packageName = event.packageName?.toString() ?: return
 
         // Track foreground time for app limits
@@ -59,7 +61,7 @@ class FocusAccessibilityService : AccessibilityService() {
 
         // 1. YouTube Shorts Detection & Blocking (Allow regular study videos!)
         if (packageName == "com.google.android.youtube") {
-            if ((isStudyActive && StudyPreferences.isBlockYouTubeShortsEnabled(context)) || isNuclearActive) {
+            if ((isStudyActive && StudyPreferences.isBlockYouTubeShortsEnabled(context)) || isNuclearBlockActive) {
                 handleYouTubeAccessibility(event)
             }
             return
@@ -67,7 +69,7 @@ class FocusAccessibilityService : AccessibilityService() {
 
         // 2. Prevent Uninstall & System Settings Tampering during Study Hours
         if (isSettingsOrInstallerPackage(packageName)) {
-            if ((isStudyActive && StudyPreferences.isStrictUninstallLockEnabled(context)) || isNuclearActive) {
+            if ((isStudyActive && StudyPreferences.isStrictUninstallLockEnabled(context)) || isNuclearLockActive) {
                 checkAndPreventUninstallAttempt(event)
             }
             return
@@ -79,7 +81,7 @@ class FocusAccessibilityService : AccessibilityService() {
         }
 
         // 4. Distraction App Interception (Timer, Nuclear Lock, or Scheduled Auto-Lock Gate)
-        checkAndBlockDistractionApp(packageName, isStudyActive, isNuclearActive)
+        checkAndBlockDistractionApp(packageName, isStudyActive, isNuclearBlockActive)
     }
 
     private fun checkAppLimitLockout(packageName: String): Boolean {

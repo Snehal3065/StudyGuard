@@ -167,10 +167,14 @@ fun AppShieldsScreen(
                 ) {
                     // Nuclear Mode Active Lockdown Warning Banner
                     if (uiState.isNuclearLockActive) {
+                        val isBreak = uiState.isNuclearMarathonActive && uiState.isNuclearMarathonBreak
                         Surface(
-                            color = Color(0xFF450A0A),
+                            color = if (isBreak) Color(0xFF1E1B4B) else Color(0xFF450A0A),
                             shape = RoundedCornerShape(14.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFFEF4444)),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.5.dp,
+                                if (isBreak) Color(0xFF818CF8) else Color(0xFFEF4444)
+                            ),
                             modifier = Modifier.fillMaxWidth().testTag("nuclear_lock_warning_banner")
                         ) {
                             Row(
@@ -180,18 +184,24 @@ fun AppShieldsScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                Text("☢️", fontSize = 26.sp)
+                                Text(if (isBreak) "☕" else "☢️", fontSize = 26.sp)
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = "NUCLEAR LOCKDOWN ACTIVE (${uiState.nuclearFormattedRemaining})",
+                                        text = if (isBreak)
+                                            "NUCLEAR MARATHON BREAK (${uiState.nuclearFormattedRemaining} left)"
+                                        else
+                                            "NUCLEAR LOCKDOWN ACTIVE (${uiState.nuclearFormattedRemaining})",
                                         fontWeight = FontWeight.Black,
                                         fontSize = 13.sp,
-                                        color = Color(0xFFFCA5A5)
+                                        color = if (isBreak) Color(0xFFA5B4FC) else Color(0xFFFCA5A5)
                                     )
                                     Text(
-                                        text = "App blocklist is frozen. You cannot toggle, unlock, or modify distraction apps during nuclear lockdown.",
+                                        text = if (isBreak)
+                                            "Break time in progress. Distraction apps are relaxed for rest, BUT app blocklists and settings are strictly frozen until the marathon finishes."
+                                        else
+                                            "App blocklist is frozen. You cannot toggle, unlock, or modify distraction apps during nuclear lockdown.",
                                         fontSize = 11.5.sp,
-                                        color = Color(0xFFFECACA),
+                                        color = if (isBreak) Color(0xFFE0E7FF) else Color(0xFFFECACA),
                                         lineHeight = 15.sp
                                     )
                                 }

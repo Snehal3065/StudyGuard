@@ -38,6 +38,7 @@ data class MarathonConfig(
 data class MarathonState(
     val isActive: Boolean = false,
     val isPaused: Boolean = false,
+    val isNuclear: Boolean = false,
     val config: MarathonConfig = MarathonConfig(),
     val currentCycle: Int = 1,
     val currentPhase: MarathonPhase = MarathonPhase.IDLE,

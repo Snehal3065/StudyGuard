@@ -625,6 +625,18 @@ fun MainAppContent(viewModel: StudyViewModel, initialShowReminders: Boolean = fa
                                 onActivateNuclearLock = { mins ->
                                     viewModel.activateNuclearLock(mins)
                                 },
+                                onActivateNuclearMarathon = { config ->
+                                    viewModel.activateNuclearMarathon(config)
+                                },
+                                onOpenNotificationSettings = {
+                                    viewModel.openNotificationSettings()
+                                },
+                                onViewNotificationReport = {
+                                    viewModel.showNotificationReportDialog()
+                                },
+                                onDismissNotificationReport = {
+                                    viewModel.dismissNotificationReportDialog()
+                                },
                                 onStartMarathon = { config ->
                                     viewModel.startMarathon(config)
                                 },

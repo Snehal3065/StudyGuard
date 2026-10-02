@@ -44,6 +44,7 @@ fun ActiveMarathonCard(
     modifier: Modifier = Modifier
 ) {
     val isStudyPhase = marathonState.currentPhase == MarathonPhase.STUDY
+    val isNuclear = marathonState.isNuclear
     val animatedProgress by animateFloatAsState(
         targetValue = marathonState.progressFraction,
         label = "phase_progress"
@@ -51,10 +52,11 @@ fun ActiveMarathonCard(
 
     var showConfirmStop by remember { mutableStateOf(false) }
 
-    val containerGradient = if (isStudyPhase) {
-        Brush.verticalGradient(listOf(Color(0xFF064E3B), Color(0xFF0F172A)))
-    } else {
-        Brush.verticalGradient(listOf(Color(0xFF1E3A8A), Color(0xFF0F172A)))
+    val containerGradient = when {
+        isNuclear && isStudyPhase -> Brush.verticalGradient(listOf(Color(0xFF7F1D1D), Color(0xFF0F172A)))
+        isNuclear && !isStudyPhase -> Brush.verticalGradient(listOf(Color(0xFF312E81), Color(0xFF0F172A)))
+        isStudyPhase -> Brush.verticalGradient(listOf(Color(0xFF064E3B), Color(0xFF0F172A)))
+        else -> Brush.verticalGradient(listOf(Color(0xFF1E3A8A), Color(0xFF0F172A)))
     }
 
     Card(
@@ -78,7 +80,12 @@ fun ActiveMarathonCard(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Surface(
-                    color = if (isStudyPhase) Color(0xFF10B981).copy(alpha = 0.2f) else Color(0xFF38BDF8).copy(alpha = 0.2f),
+                    color = when {
+                        isNuclear && isStudyPhase -> Color(0xFFDC2626).copy(alpha = 0.25f)
+                        isNuclear && !isStudyPhase -> Color(0xFF6366F1).copy(alpha = 0.25f)
+                        isStudyPhase -> Color(0xFF10B981).copy(alpha = 0.2f)
+                        else -> Color(0xFF38BDF8).copy(alpha = 0.2f)
+                    },
                     shape = CircleShape
                 ) {
                     Row(
@@ -90,14 +97,30 @@ fun ActiveMarathonCard(
                             modifier = Modifier
                                 .size(8.dp)
                                 .clip(CircleShape)
-                                .background(if (isStudyPhase) Color(0xFF10B981) else Color(0xFF38BDF8))
+                                .background(
+                                    when {
+                                        isNuclear && isStudyPhase -> Color(0xFFEF4444)
+                                        isNuclear && !isStudyPhase -> Color(0xFF818CF8)
+                                        isStudyPhase -> Color(0xFF10B981)
+                                        else -> Color(0xFF38BDF8)
+                                    }
+                                )
                         )
                         Text(
-                            text = if (isStudyPhase) "CYCLE ${marathonState.currentCycle} OF ${marathonState.config.totalCycles} • STUDY"
-                            else "CYCLE ${marathonState.currentCycle} BREAK • REST",
+                            text = when {
+                                isNuclear && isStudyPhase -> "☢️ NUCLEAR CYCLE ${marathonState.currentCycle} OF ${marathonState.config.totalCycles} • STRICT FOCUS"
+                                isNuclear && !isStudyPhase -> "☕ NUCLEAR BREAK • CYCLE ${marathonState.currentCycle} (SETTINGS FROZEN)"
+                                isStudyPhase -> "CYCLE ${marathonState.currentCycle} OF ${marathonState.config.totalCycles} • STUDY"
+                                else -> "CYCLE ${marathonState.currentCycle} BREAK • REST"
+                            },
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Black,
-                            color = if (isStudyPhase) Color(0xFF34D399) else Color(0xFF38BDF8),
+                            color = when {
+                                isNuclear && isStudyPhase -> Color(0xFFFCA5A5)
+                                isNuclear && !isStudyPhase -> Color(0xFFA5B4FC)
+                                isStudyPhase -> Color(0xFF34D399)
+                                else -> Color(0xFF38BDF8)
+                            },
                             letterSpacing = 0.5.sp
                         )
                     }
@@ -200,53 +223,104 @@ fun ActiveMarathonCard(
             }
 
             // Marathon Controls
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            if (isNuclear) {
                 if (!isStudyPhase) {
-                    Button(
-                        onClick = onSkipBreak,
-                        modifier = Modifier.weight(1f).testTag("skip_break_button"),
-                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryIndigo)
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Icon(Icons.Filled.SkipNext, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Skip Break 📚", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Button(
+                            onClick = onSkipBreak,
+                            modifier = Modifier.fillMaxWidth().testTag("skip_break_button"),
+                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryIndigo),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Filled.SkipNext, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Skip Break & Study Now 📚", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        Surface(
+                            color = Color(0xFF1E1B4B),
+                            shape = RoundedCornerShape(10.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, PrimaryIndigo.copy(alpha = 0.5f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = "☕ Nuclear Break: Distraction apps unlock for rest, but settings & app lock configuration remain strictly frozen.",
+                                color = Color(0xFFA5B4FC),
+                                fontSize = 11.sp,
+                                modifier = Modifier.padding(10.dp),
+                                textAlign = TextAlign.Center
+                            )
+                        }
                     }
                 } else {
-                    if (marathonState.isPaused) {
-                        Button(
-                            onClick = onResume,
-                            modifier = Modifier.weight(1f).testTag("resume_marathon_button"),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
-                        ) {
-                            Icon(Icons.Filled.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Resume", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        }
-                    } else {
-                        OutlinedButton(
-                            onClick = onPause,
-                            modifier = Modifier.weight(1f).testTag("pause_marathon_button"),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
-                        ) {
-                            Icon(Icons.Filled.Pause, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Pause", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        }
+                    Surface(
+                        color = Color(0xFF450A0A),
+                        shape = RoundedCornerShape(10.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFEF4444)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "☢️ Unbreakable Nuclear Focus: Distractions & notifications blocked. Pausing and early cancellation are disabled.",
+                            color = Color(0xFFFCA5A5),
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
+                            modifier = Modifier.padding(10.dp),
+                            textAlign = TextAlign.Center
+                        )
                     }
                 }
-
-                OutlinedButton(
-                    onClick = { showConfirmStop = true },
-                    modifier = Modifier.testTag("stop_marathon_button"),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFF87171))
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Filled.Stop, contentDescription = "End", modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("End Early", fontSize = 12.sp)
+                    if (!isStudyPhase) {
+                        Button(
+                            onClick = onSkipBreak,
+                            modifier = Modifier.weight(1f).testTag("skip_break_button"),
+                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryIndigo)
+                        ) {
+                            Icon(Icons.Filled.SkipNext, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Skip Break 📚", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    } else {
+                        if (marathonState.isPaused) {
+                            Button(
+                                onClick = onResume,
+                                modifier = Modifier.weight(1f).testTag("resume_marathon_button"),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
+                            ) {
+                                Icon(Icons.Filled.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Resume", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        } else {
+                            OutlinedButton(
+                                onClick = onPause,
+                                modifier = Modifier.weight(1f).testTag("pause_marathon_button"),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+                            ) {
+                                Icon(Icons.Filled.Pause, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Pause", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+
+                    OutlinedButton(
+                        onClick = { showConfirmStop = true },
+                        modifier = Modifier.testTag("stop_marathon_button"),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFF87171))
+                    ) {
+                        Icon(Icons.Filled.Stop, contentDescription = "End", modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("End Early", fontSize = 12.sp)
+                    }
                 }
             }
         }
