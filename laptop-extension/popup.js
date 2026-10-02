@@ -17,8 +17,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     chrome.windows.create({
       url: chrome.runtime.getURL('music.html'),
       type: 'popup',
-      width: 360,
-      height: 270,
+      width: 480,
+      height: 380,
       focused: true
     });
   }
